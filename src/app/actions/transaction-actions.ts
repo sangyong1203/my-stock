@@ -23,11 +23,6 @@ type TransactionActionState = {
   createdTransactionId?: string;
 };
 
-const INITIAL_STATE: TransactionActionState = {
-  success: false,
-  message: "",
-};
-
 const DEMO_USER_ID = "demo-user";
 const DEMO_PORTFOLIO_ID = "demo-portfolio";
 const MARKETS = ["KRX", "NASDAQ", "NYSE", "ETF"] as const;
@@ -147,6 +142,7 @@ export async function createTransactionAction(
     const feeAmount = getNumber(formData, "feeAmount", 0);
     const taxAmount = getNumber(formData, "taxAmount", 0);
     const tradeDate = getString(formData, "tradeDate");
+    const executedAt = getString(formData, "executedAt");
     const memo = getString(formData, "memo");
     const thesisNote = getString(formData, "thesisNote");
 
@@ -215,6 +211,7 @@ export async function createTransactionAction(
 
     const transactionId = randomUUID();
     const tradeDateValue = new Date(`${tradeDate}T00:00:00`);
+    const executedAtValue = executedAt ? new Date(executedAt) : null;
 
     await db.transaction(async (tx) => {
       await tx.insert(transactions).values({
@@ -227,6 +224,7 @@ export async function createTransactionAction(
         feeAmount: toNumeric(feeAmount, 6),
         taxAmount: toNumeric(taxAmount, 6),
         tradeDate: tradeDateValue,
+        executedAt: executedAtValue,
         memo: memo || null,
       });
 
@@ -288,5 +286,3 @@ export async function createTransactionAction(
     };
   }
 }
-
-export { INITIAL_STATE as transactionActionInitialState };

@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/market-data/sync-prices",
+      "schedule": "0 * * * 1-5"
+    }
+  ]
+}
