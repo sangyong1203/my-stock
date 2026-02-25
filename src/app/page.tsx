@@ -2,6 +2,8 @@
 import { SyncMarketPricesButton } from "@/components/prices/sync-market-prices-button";
 import { UpsertPriceSnapshotDialog } from "@/components/prices/upsert-price-snapshot-dialog";
 import { CreateTransactionDialog } from "@/components/transactions/create-transaction-dialog";
+import { DeleteTransactionButton } from "@/components/transactions/delete-transaction-button";
+import { EditTransactionDialog } from "@/components/transactions/edit-transaction-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -207,13 +209,14 @@ export default async function Home() {
                       <TableHead className="text-right">Avg Cost</TableHead>
                       <TableHead className="text-right">Current</TableHead>
                       <TableHead className="text-right">Value</TableHead>
+                      <TableHead className="text-right">Unrealized P/L</TableHead>
                       <TableHead className="text-right">P/L %</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {positions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                           No positions yet. Add your first trade.
                         </TableCell>
                       </TableRow>
@@ -223,6 +226,8 @@ export default async function Home() {
                           row.avgCost === 0
                             ? 0
                             : ((row.currentPrice - row.avgCost) / row.avgCost) * 100;
+                        const unrealizedPnl =
+                          row.quantity * (row.currentPrice - row.avgCost);
                         const positionValue = row.quantity * row.currentPrice;
                         const positive = pnlRate >= 0;
 
@@ -245,6 +250,13 @@ export default async function Home() {
                             </TableCell>
                             <TableCell className="text-right font-medium">
                               {formatCurrency(positionValue, row.currency)}
+                            </TableCell>
+                            <TableCell
+                              className={`text-right font-medium ${
+                                unrealizedPnl >= 0 ? "text-emerald-500" : "text-rose-500"
+                              }`}
+                            >
+                              {formatCurrency(unrealizedPnl, row.currency)}
                             </TableCell>
                             <TableCell
                               className={`text-right font-medium ${positive ? "text-emerald-500" : "text-rose-500"}`}
@@ -281,17 +293,26 @@ export default async function Home() {
                       className="rounded-xl border border-border/70 bg-muted/20 p-3"
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <div className="font-medium">{tx.symbol}</div>
-                        <Badge
-                          variant="outline"
-                          className={
-                            tx.side === "buy"
-                              ? "border-emerald-500/40 text-emerald-500"
-                              : "border-rose-500/40 text-rose-500"
-                          }
-                        >
-                          {tx.side.toUpperCase()}
-                        </Badge>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div className="font-medium">{tx.symbol}</div>
+                          <Badge
+                            variant="outline"
+                            className={
+                              tx.side === "buy"
+                                ? "border-emerald-500/40 text-emerald-500"
+                                : "border-rose-500/40 text-rose-500"
+                            }
+                          >
+                            {tx.side.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <EditTransactionDialog transaction={tx} />
+                          <DeleteTransactionButton
+                            transactionId={tx.id}
+                            symbol={tx.symbol}
+                          />
+                        </div>
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span>Qty: {tx.quantity}</span>
@@ -305,6 +326,20 @@ export default async function Home() {
                           Executed At:{" "}
                           {tx.executedAt ? formatDateTime(tx.executedAt) : "-"}
                         </span>
+                        {tx.side === "sell" && tx.realizedPnlDelta !== null ? (
+                          <span
+                            className={`col-span-2 font-medium ${
+                              tx.realizedPnlDelta >= 0
+                                ? "text-emerald-500"
+                                : "text-rose-500"
+                            }`}
+                          >
+                            Realized P/L: {formatCurrency(tx.realizedPnlDelta)}{" "}
+                            {tx.realizedReturnRate !== null
+                              ? `(${tx.realizedReturnRate.toFixed(2)}%)`
+                              : ""}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   ))

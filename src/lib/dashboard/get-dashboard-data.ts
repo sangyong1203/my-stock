@@ -27,6 +27,8 @@ export type DashboardTransactionRow = {
   taxAmount: number;
   tradeDate: Date;
   executedAt: Date | null;
+  realizedPnlDelta: number | null;
+  realizedReturnRate: number | null;
 };
 
 export type DashboardData = {
@@ -163,6 +165,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     const allTransactionRows = await db
       .select({
         securityId: transactions.securityId,
+        id: transactions.id,
         side: transactions.side,
         quantity: transactions.quantity,
         unitPrice: transactions.unitPrice,
@@ -180,6 +183,10 @@ export async function getDashboardData(): Promise<DashboardData> {
       );
 
     const positionStateBySecurity = new Map<string, PositionState>();
+    const realizedByTransactionId = new Map<
+      string,
+      { realizedPnlDelta: number | null; realizedReturnRate: number | null }
+    >();
     let realizedPnl = 0;
     let realizedCostBasisSold = 0;
 
@@ -195,6 +202,13 @@ export async function getDashboardData(): Promise<DashboardData> {
       positionStateBySecurity.set(row.securityId, result.next);
       realizedPnl += result.realizedDelta;
       realizedCostBasisSold += result.soldCostBasis;
+      realizedByTransactionId.set(row.id, {
+        realizedPnlDelta: row.side === "sell" ? result.realizedDelta : null,
+        realizedReturnRate:
+          row.side === "sell" && result.soldCostBasis > 0
+            ? (result.realizedDelta / result.soldCostBasis) * 100
+            : null,
+      });
     }
 
     const realizedReturnRate =
@@ -213,6 +227,9 @@ export async function getDashboardData(): Promise<DashboardData> {
         taxAmount: Number(row.taxAmount),
         tradeDate: row.tradeDate,
         executedAt: row.executedAt,
+        realizedPnlDelta: realizedByTransactionId.get(row.id)?.realizedPnlDelta ?? null,
+        realizedReturnRate:
+          realizedByTransactionId.get(row.id)?.realizedReturnRate ?? null,
       })),
       realizedPnl,
       realizedReturnRate,

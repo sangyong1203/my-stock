@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   portfolios,
@@ -30,6 +30,11 @@ const CURRENCIES = ["KRW", "USD"] as const;
 type Market = (typeof MARKETS)[number];
 type Currency = (typeof CURRENCIES)[number];
 
+type ActionResult = {
+  success: boolean;
+  message: string;
+};
+
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
@@ -50,6 +55,79 @@ function toNumeric(value: number, scale = 6) {
 
 function normalizeSymbol(symbol: string) {
   return symbol.toUpperCase().replace(/\s+/g, "");
+}
+
+async function recalculatePositionForSecurityTx(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  portfolioId: string,
+  securityId: string,
+) {
+  const remainingTransactions = await tx
+    .select({
+      side: transactions.side,
+      quantity: transactions.quantity,
+      unitPrice: transactions.unitPrice,
+      feeAmount: transactions.feeAmount,
+      taxAmount: transactions.taxAmount,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.portfolioId, portfolioId),
+        eq(transactions.securityId, securityId),
+      ),
+    )
+    .orderBy(asc(transactions.tradeDate), asc(transactions.createdAt));
+
+  let nextPosition = EMPTY_POSITION;
+  for (const row of remainingTransactions) {
+    nextPosition = applyAverageCostTrade(nextPosition, {
+      side: row.side,
+      quantity: Number(row.quantity),
+      unitPrice: Number(row.unitPrice),
+      feeAmount: Number(row.feeAmount),
+      taxAmount: Number(row.taxAmount),
+    });
+  }
+
+  const [existingPosition] = await tx
+    .select({ id: positions.id })
+    .from(positions)
+    .where(
+      and(eq(positions.portfolioId, portfolioId), eq(positions.securityId, securityId)),
+    )
+    .limit(1);
+
+  if (remainingTransactions.length === 0 || nextPosition.quantity === 0) {
+    if (existingPosition) {
+      await tx.delete(positions).where(eq(positions.id, existingPosition.id));
+    }
+    return;
+  }
+
+  if (existingPosition) {
+    await tx
+      .update(positions)
+      .set({
+        quantity: toNumeric(nextPosition.quantity, 8),
+        avgCostPerShare: toNumeric(nextPosition.avgCostPerShare, 6),
+        totalCostBasis: toNumeric(nextPosition.totalCostBasis, 6),
+        realizedPnl: toNumeric(nextPosition.realizedPnl, 6),
+        lastCalculatedAt: new Date(),
+      })
+      .where(eq(positions.id, existingPosition.id));
+    return;
+  }
+
+  await tx.insert(positions).values({
+    id: randomUUID(),
+    portfolioId,
+    securityId,
+    quantity: toNumeric(nextPosition.quantity, 8),
+    avgCostPerShare: toNumeric(nextPosition.avgCostPerShare, 6),
+    totalCostBasis: toNumeric(nextPosition.totalCostBasis, 6),
+    realizedPnl: toNumeric(nextPosition.realizedPnl, 6),
+  });
 }
 
 async function ensurePortfolio(userId: string, currency: Currency) {
@@ -284,5 +362,150 @@ export async function createTransactionAction(
       success: false,
       message,
     };
+  }
+}
+
+export async function deleteTransactionAction(transactionId: string): Promise<ActionResult> {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return {
+        success: false,
+        message: "DATABASE_URL is required before deleting transactions.",
+      };
+    }
+
+    if (!transactionId) {
+      return {
+        success: false,
+        message: "Transaction ID is required.",
+      };
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [target] = await tx
+        .select({
+          id: transactions.id,
+          portfolioId: transactions.portfolioId,
+          securityId: transactions.securityId,
+          side: transactions.side,
+          symbol: securities.symbol,
+        })
+        .from(transactions)
+        .innerJoin(securities, eq(transactions.securityId, securities.id))
+        .where(eq(transactions.id, transactionId))
+        .limit(1);
+
+      if (!target) {
+        throw new Error("Transaction not found.");
+      }
+
+      await tx.delete(transactions).where(eq(transactions.id, transactionId));
+
+      await recalculatePositionForSecurityTx(
+        tx,
+        target.portfolioId,
+        target.securityId,
+      );
+
+      return {
+        symbol: target.symbol,
+        side: target.side,
+      };
+    });
+
+    revalidatePath("/");
+
+    return {
+      success: true,
+      message: `Deleted transaction (${result.symbol} ${result.side}).`,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete transaction.";
+    return {
+      success: false,
+      message,
+    };
+  }
+}
+
+export async function updateTransactionAction(formData: FormData): Promise<ActionResult> {
+  try {
+    if (!process.env.DATABASE_URL) {
+      return {
+        success: false,
+        message: "DATABASE_URL is required before updating transactions.",
+      };
+    }
+
+    const transactionId = getString(formData, "transactionId");
+    const sideRaw = getString(formData, "side");
+    const side = sideRaw === "sell" ? "sell" : "buy";
+    const quantity = getNumber(formData, "quantity");
+    const unitPrice = getNumber(formData, "unitPrice");
+    const feeAmount = getNumber(formData, "feeAmount", 0);
+    const taxAmount = getNumber(formData, "taxAmount", 0);
+    const tradeDate = getString(formData, "tradeDate");
+    const executedAt = getString(formData, "executedAt");
+
+    if (!transactionId) {
+      return { success: false, message: "Transaction ID is required." };
+    }
+    if (quantity <= 0) {
+      return { success: false, message: "Quantity must be greater than 0." };
+    }
+    if (unitPrice < 0) {
+      return { success: false, message: "Unit price must be 0 or greater." };
+    }
+    if (!tradeDate) {
+      return { success: false, message: "Trade date is required." };
+    }
+
+    const tradeDateValue = new Date(`${tradeDate}T00:00:00`);
+    const executedAtValue = executedAt ? new Date(executedAt) : null;
+
+    const result = await db.transaction(async (tx) => {
+      const [target] = await tx
+        .select({
+          id: transactions.id,
+          portfolioId: transactions.portfolioId,
+          securityId: transactions.securityId,
+        })
+        .from(transactions)
+        .where(eq(transactions.id, transactionId))
+        .limit(1);
+
+      if (!target) {
+        throw new Error("Transaction not found.");
+      }
+
+      await tx
+        .update(transactions)
+        .set({
+          side,
+          quantity: toNumeric(quantity, 8),
+          unitPrice: toNumeric(unitPrice, 6),
+          feeAmount: toNumeric(feeAmount, 6),
+          taxAmount: toNumeric(taxAmount, 6),
+          tradeDate: tradeDateValue,
+          executedAt: executedAtValue,
+        })
+        .where(eq(transactions.id, transactionId));
+
+      await recalculatePositionForSecurityTx(tx, target.portfolioId, target.securityId);
+
+      return { side };
+    });
+
+    revalidatePath("/");
+
+    return {
+      success: true,
+      message: `Updated transaction (${result.side}).`,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to update transaction.";
+    return { success: false, message };
   }
 }
