@@ -12,24 +12,15 @@ import type { DashboardModuleProps } from "@/features/dashboard/types";
 
 export function TotalMarketValueModule({ model }: DashboardModuleProps) {
   return (
-    <Card className="border-border/70">
-      <CardHeader className="pb-2">
+    <Card className="h-full border-border/70">
+      <CardHeader className="flex h-full flex-col justify-between pb-2">
         <CardDescription>Total Market Value</CardDescription>
-        <CardTitle className="flex items-center gap-2 text-2xl">
+        <CardTitle className="flex items-center gap-2 text-xl">
           <Wallet className="size-5 text-emerald-500" />
           {formatCurrency(model.summaries.marketValue)}
         </CardTitle>
-      </CardHeader>
-    </Card>
-  );
-}
-
-export function TotalCostBasisModule({ model }: DashboardModuleProps) {
-  return (
-    <Card className="border-border/70">
-      <CardHeader className="pb-2">
         <CardDescription>Total Cost Basis</CardDescription>
-        <CardTitle className="text-2xl">
+        <CardTitle className="text-xl">
           {formatCurrency(model.summaries.invested)}
         </CardTitle>
       </CardHeader>
@@ -37,61 +28,57 @@ export function TotalCostBasisModule({ model }: DashboardModuleProps) {
   );
 }
 
-export function UnrealizedPnlModule({ model }: DashboardModuleProps) {
-  const positive = model.summaries.unrealizedPnl >= 0;
+function PnlMetricRow({
+  label,
+  amount,
+  rate,
+}: {
+  label: string;
+  amount: number;
+  rate: number;
+}) {
+  const positive = amount >= 0;
 
   return (
-    <Card className="border-border/70">
-      <CardHeader className="pb-2">
-        <CardDescription>Unrealized P/L</CardDescription>
-        <CardTitle className="flex items-center gap-2 text-2xl">
+    <div className="space-y-1">
+      <CardDescription>{label}</CardDescription>
+      <div className="flex items-center justify-between gap-3">
+        <CardTitle className="flex items-center gap-2 text-xl">
           {positive ? (
             <TrendingUp className="size-5 text-emerald-500" />
           ) : (
             <TrendingDown className="size-5 text-rose-500" />
           )}
           <span className={positive ? "text-emerald-500" : "text-rose-500"}>
-            {formatCurrency(model.summaries.unrealizedPnl)}
+            {formatCurrency(amount)}
           </span>
         </CardTitle>
-        <CardDescription
-          className={
-            model.summaries.returnRate >= 0 ? "text-emerald-500" : "text-rose-500"
-          }
+        <span
+          className={`text-sm font-medium ${
+            rate >= 0 ? "text-emerald-500" : "text-rose-500"
+          }`}
         >
-          {model.summaries.returnRate.toFixed(2)}%
-        </CardDescription>
-      </CardHeader>
-    </Card>
+          {rate.toFixed(2)}%
+        </span>
+      </div>
+    </div>
   );
 }
 
-export function RealizedPnlModule({ model }: DashboardModuleProps) {
-  const positive = model.dashboard.realizedPnl >= 0;
-
+export function PnlSummaryModule({ model }: DashboardModuleProps) {
   return (
-    <Card className="border-border/70">
-      <CardHeader className="pb-2">
-        <CardDescription>Realized P/L</CardDescription>
-        <CardTitle className="flex items-center gap-2 text-2xl">
-          {positive ? (
-            <TrendingUp className="size-5 text-emerald-500" />
-          ) : (
-            <TrendingDown className="size-5 text-rose-500" />
-          )}
-          <span className={positive ? "text-emerald-500" : "text-rose-500"}>
-            {formatCurrency(model.dashboard.realizedPnl)}
-          </span>
-        </CardTitle>
-        <CardDescription
-          className={
-            model.dashboard.realizedReturnRate >= 0
-              ? "text-emerald-500"
-              : "text-rose-500"
-          }
-        >
-          {model.dashboard.realizedReturnRate.toFixed(2)}%
-        </CardDescription>
+    <Card className="h-full border-border/70">
+      <CardHeader className="flex h-full flex-col justify-between gap-4 pb-2">
+        <PnlMetricRow
+          label="Unrealized P/L"
+          amount={model.summaries.unrealizedPnl}
+          rate={model.summaries.returnRate}
+        />
+        <PnlMetricRow
+          label="Realized P/L"
+          amount={model.dashboard.realizedPnl}
+          rate={model.dashboard.realizedReturnRate}
+        />
       </CardHeader>
     </Card>
   );

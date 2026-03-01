@@ -8,10 +8,8 @@ import {
   RecentTransactionsModule,
 } from "@/features/dashboard/modules/panel-modules";
 import {
-  RealizedPnlModule,
-  TotalCostBasisModule,
+  PnlSummaryModule,
   TotalMarketValueModule,
-  UnrealizedPnlModule,
 } from "@/features/dashboard/modules/summary-modules";
 
 export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> = {
@@ -21,42 +19,20 @@ export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> 
     component: TotalMarketValueModule,
     defaultWidthPreset: "md",
     widthPresets: [
-      { id: "sm", label: "S", className: "w-[280px] min-w-[280px]" },
-      { id: "md", label: "M", className: "w-[320px] min-w-[320px]" },
-      { id: "lg", label: "L", className: "w-[380px] min-w-[380px]" },
+      { id: "sm", label: "S", className: "w-[220px] min-w-[220px]" },
+      { id: "md", label: "M", className: "w-[250px] min-w-[250px]" },
+      { id: "lg", label: "L", className: "w-[290px] min-w-[290px]" },
     ],
   },
-  "total-cost-basis": {
-    id: "total-cost-basis",
-    title: "Total Cost Basis",
-    component: TotalCostBasisModule,
+  "pnl-summary": {
+    id: "pnl-summary",
+    title: "P/L Summary",
+    component: PnlSummaryModule,
     defaultWidthPreset: "md",
     widthPresets: [
       { id: "sm", label: "S", className: "w-[280px] min-w-[280px]" },
       { id: "md", label: "M", className: "w-[320px] min-w-[320px]" },
-      { id: "lg", label: "L", className: "w-[380px] min-w-[380px]" },
-    ],
-  },
-  "unrealized-pnl": {
-    id: "unrealized-pnl",
-    title: "Unrealized P/L",
-    component: UnrealizedPnlModule,
-    defaultWidthPreset: "md",
-    widthPresets: [
-      { id: "sm", label: "S", className: "w-[280px] min-w-[280px]" },
-      { id: "md", label: "M", className: "w-[320px] min-w-[320px]" },
-      { id: "lg", label: "L", className: "w-[380px] min-w-[380px]" },
-    ],
-  },
-  "realized-pnl": {
-    id: "realized-pnl",
-    title: "Realized P/L",
-    component: RealizedPnlModule,
-    defaultWidthPreset: "md",
-    widthPresets: [
-      { id: "sm", label: "S", className: "w-[280px] min-w-[280px]" },
-      { id: "md", label: "M", className: "w-[320px] min-w-[320px]" },
-      { id: "lg", label: "L", className: "w-[380px] min-w-[380px]" },
+      { id: "lg", label: "L", className: "w-[360px] min-w-[360px]" },
     ],
   },
   "open-positions": {
@@ -98,13 +74,13 @@ export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> 
 const dashboardModuleOrder = {
   summary: [
     "total-market-value",
-    "total-cost-basis",
-    "unrealized-pnl",
-    "realized-pnl",
+    "pnl-summary",
   ],
   workspace: ["open-positions", "recent-transactions", "next-build-steps"],
   hidden: [],
 } as const;
+
+export const dashboardSummaryModuleIds = [...dashboardModuleOrder.summary];
 
 export function createDefaultDashboardLayout(): DashboardLayoutState {
   return {

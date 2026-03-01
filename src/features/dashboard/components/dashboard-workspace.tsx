@@ -38,18 +38,10 @@ export function DashboardWorkspace({ model }: Props) {
   const { layout } = useDashboardLayout();
 
   return (
-    <>
-      <section className="overflow-x-auto pb-2">
-        <div className="flex min-w-max gap-4">
-          {renderModules(layout.summary, layout.widths, model)}
-        </div>
-      </section>
-
-      <section className="overflow-x-auto pb-2">
-        <div className="flex min-w-max items-start gap-4">
-          {renderModules(layout.workspace, layout.widths, model)}
-        </div>
-      </section>
-    </>
+    <section className="overflow-x-auto pb-2">
+      <div className="flex min-w-max items-start gap-4">
+        {renderModules(layout.workspace, layout.widths, model)}
+      </div>
+    </section>
   );
 }

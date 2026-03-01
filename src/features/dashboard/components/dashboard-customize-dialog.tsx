@@ -15,9 +15,9 @@ import { dashboardModuleRegistry } from "@/features/dashboard/registry";
 import type { DashboardArea } from "@/features/dashboard/types";
 
 const AREA_LABELS: Record<DashboardArea, string> = {
-  summary: "Summary Row",
   workspace: "Workspace Row",
   hidden: "Hidden",
+  summary: "Summary Row",
 };
 
 type AreaColumnProps = {
@@ -84,16 +84,6 @@ function AreaColumn({ area }: AreaColumnProps) {
                   <div className="text-xs text-muted-foreground">Drag to reorder</div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {area !== "summary" ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => moveToArea(moduleId, "summary")}
-                    >
-                      Move to Summary
-                    </Button>
-                  ) : null}
                   {area !== "workspace" ? (
                     <Button
                       type="button"
@@ -157,11 +147,10 @@ export function DashboardCustomizeDialog() {
         <DialogHeader>
           <DialogTitle>Customize Dashboard</DialogTitle>
           <DialogDescription>
-            Move modules between rows, hide them, and keep the layout in local storage.
+            Reorder workspace modules, adjust widths, hide modules, and keep the layout in local storage.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <AreaColumn area="summary" />
+        <div className="grid gap-4 lg:grid-cols-2">
           <AreaColumn area="workspace" />
           <AreaColumn area="hidden" />
         </div>
