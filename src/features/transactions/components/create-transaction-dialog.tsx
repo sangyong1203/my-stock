@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { createTransactionAction } from "@/app/actions/transaction-actions";
+import { createTransactionAction } from "@/features/transactions/actions/transaction-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -271,3 +271,4 @@ export function CreateTransactionDialog({ triggerClassName }: Props) {
     </Dialog>
   );
 }
+

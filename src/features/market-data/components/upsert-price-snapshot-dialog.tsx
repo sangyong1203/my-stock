@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { upsertPriceSnapshotAction } from "@/app/actions/price-snapshot-actions";
+import { upsertPriceSnapshotAction } from "@/features/market-data/actions/price-snapshot-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -150,3 +150,4 @@ export function UpsertPriceSnapshotDialog({ triggerClassName }: Props) {
     </Dialog>
   );
 }
+

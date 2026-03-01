@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -237,3 +238,12 @@ export const portfolioMetricsDaily = pgTable(
   },
   (table) => [uniqueIndex("portfolio_metrics_daily_idx").on(table.portfolioId, table.tradingDay)],
 );
+
+export const dashboardPreferences = pgTable("dashboard_preference", {
+  userId: text("userId")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  layout: jsonb("layout").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});

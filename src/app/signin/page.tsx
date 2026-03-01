@@ -13,22 +13,22 @@ export default function SignInPage() {
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <Card className="w-full max-w-md border-border/70">
         <CardHeader>
-          <CardTitle>로그인</CardTitle>
+          <CardTitle>Sign In</CardTitle>
           <CardDescription>
-            GitHub OAuth로 myStock에 로그인합니다.
+            Sign in to myStock with your GitHub account.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <GitHubSignInButton />
           <p className="text-xs text-muted-foreground">
-            환경변수 `GITHUB_ID`, `GITHUB_SECRET`, `NEXTAUTH_SECRET`, `DATABASE_URL`
-            설정이 필요합니다.
+            Configure `GITHUB_ID`, `GITHUB_SECRET`, `NEXTAUTH_SECRET`, and
+            `DATABASE_URL` before using authentication.
           </p>
           <Link
             href="/"
             className="inline-block text-xs text-muted-foreground underline underline-offset-4"
           >
-            홈으로 돌아가기
+            Back to dashboard
           </Link>
         </CardContent>
       </Card>

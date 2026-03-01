@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# myStock
 
-## Getting Started
+Single-screen investment dashboard built with `Next.js`, `Auth.js`, `Drizzle`, `Neon`, `shadcn/ui`, and `Tailwind`.
 
-First, run the development server:
+## Development
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Database
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Generate and apply migrations:
 
-## Learn More
+```bash
+npm run db:generate
+npm run db:migrate
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+This project uses a domain-first structure.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `src/app`
+  Route entry points only. Keep pages and API routes thin.
+- `src/features/<domain>/components`
+  UI for that domain.
+- `src/features/<domain>/actions`
+  Next.js `use server` entry points. Parse input, call server logic, revalidate paths.
+- `src/features/<domain>/server`
+  Domain server logic: DB access, calculations, external API calls, persistence.
+- `src/components/ui`
+  Shared presentational UI primitives.
+- `src/db`
+  Drizzle schema and DB client.
+- `src/lib`
+  Cross-domain shared utilities only.
 
-## Deploy on Vercel
+## Current domains
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `dashboard`
+  Module registry, layout persistence, dashboard queries.
+- `transactions`
+  Trade create/update/delete and average-cost accounting.
+- `market-data`
+  Manual price snapshots, Finnhub sync, sync polling state.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Rule of thumb
+
+- If code belongs to one domain, keep it inside that feature.
+- If code is reused across multiple domains, move it to `src/lib`.

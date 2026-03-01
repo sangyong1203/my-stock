@@ -8,6 +8,13 @@
       "when": 1771853067360,
       "tag": "0000_omniscient_omega_flight",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772339022608,
+      "tag": "0001_curly_zaran",
+      "breakpoints": true
     }
   ]
 }

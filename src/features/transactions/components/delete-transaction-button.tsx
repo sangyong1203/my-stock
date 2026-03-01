@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { deleteTransactionAction } from "@/app/actions/transaction-actions";
+import { deleteTransactionAction } from "@/features/transactions/actions/transaction-actions";
 import { Button } from "@/components/ui/button";
 
 type Props = {
@@ -54,3 +54,4 @@ export function DeleteTransactionButton({ transactionId, symbol }: Props) {
     </Button>
   );
 }
+

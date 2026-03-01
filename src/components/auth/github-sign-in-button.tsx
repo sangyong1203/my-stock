@@ -19,7 +19,7 @@ export function GitHubSignInButton() {
       disabled={isPending}
     >
       {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-      GitHub로 로그인
+      Continue with GitHub
     </Button>
   );
 }

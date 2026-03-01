@@ -4,7 +4,7 @@ import { Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { updateTransactionAction } from "@/app/actions/transaction-actions";
+import { updateTransactionAction } from "@/features/transactions/actions/transaction-actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -217,3 +217,4 @@ export function EditTransactionDialog({ transaction }: Props) {
     </Dialog>
   );
 }
+
