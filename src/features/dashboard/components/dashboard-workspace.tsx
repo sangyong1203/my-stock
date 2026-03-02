@@ -26,7 +26,7 @@ function renderModules(
     return (
       <div
         key={entry.id}
-        className={`shrink-0 ${getDashboardModuleWidthClass(moduleId, widths[moduleId])}`}
+        className={`dashboard-workspace-module dashboard-workspace-module-${entry.id} shrink-0 self-stretch ${getDashboardModuleWidthClass(moduleId, widths[moduleId])}`}
       >
         <Component model={model} />
       </div>
@@ -38,8 +38,8 @@ export function DashboardWorkspace({ model }: Props) {
   const { layout } = useDashboardLayout();
 
   return (
-    <section className="overflow-x-auto pb-2">
-      <div className="flex min-w-max items-start gap-4">
+    <section className="dashboard-workspace flex h-full flex-1 overflow-x-auto pb-2">
+      <div className="dashboard-workspace-track flex h-full min-w-max items-stretch gap-4">
         {renderModules(layout.workspace, layout.widths, model)}
       </div>
     </section>

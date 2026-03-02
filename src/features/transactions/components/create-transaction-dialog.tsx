@@ -53,28 +53,51 @@ function SubmitButton() {
 
 type Props = {
   triggerClassName?: string;
+  triggerLabel?: string;
+  initialValues?: {
+    symbol?: string;
+    securityName?: string;
+    market?: string;
+    currency?: string;
+    side?: "buy" | "sell";
+  };
 };
 
-export function CreateTransactionDialog({ triggerClassName }: Props) {
+export function CreateTransactionDialog({
+  triggerClassName,
+  triggerLabel = "Add Trade",
+  initialValues,
+}: Props) {
+  const defaultSide = initialValues?.side ?? "buy";
   const [open, setOpen] = useState(false);
   const [state, formAction] = useActionState(
     createTransactionAction,
     transactionActionInitialState,
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const symbolRef = useRef<HTMLInputElement>(null);
+  const securityNameRef = useRef<HTMLInputElement>(null);
+  const marketRef = useRef<HTMLSelectElement>(null);
+  const currencyRef = useRef<HTMLSelectElement>(null);
+  const sideRef = useRef<HTMLSelectElement>(null);
   const tradeDateRef = useRef<HTMLInputElement>(null);
   const executedAtRef = useRef<HTMLInputElement>(null);
+  const unitPriceRef = useRef<HTMLInputElement>(null);
+  const [lookupPending, setLookupPending] = useState(false);
 
   useEffect(() => {
     if (!open) return;
 
+    if (sideRef.current) {
+      sideRef.current.value = defaultSide;
+    }
     if (tradeDateRef.current && !tradeDateRef.current.value) {
       tradeDateRef.current.value = getCurrentDateValue();
     }
     if (executedAtRef.current && !executedAtRef.current.value) {
       executedAtRef.current.value = getCurrentDateTimeLocalValue();
     }
-  }, [open]);
+  }, [defaultSide, open]);
 
   useEffect(() => {
     if (state.success && state.createdTransactionId) {
@@ -93,11 +116,74 @@ export function CreateTransactionDialog({ triggerClassName }: Props) {
     }
   }, [state.success, state.message]);
 
+  async function handleSymbolLookup() {
+    const symbol = symbolRef.current?.value.trim().toUpperCase() ?? "";
+    if (!symbol || lookupPending) {
+      return;
+    }
+
+    setLookupPending(true);
+
+    try {
+      const response = await fetch(
+        `/api/market-data/security-lookup?symbol=${encodeURIComponent(symbol)}`,
+        { cache: "no-store" },
+      );
+      const payload = (await response.json()) as
+        | {
+            ok: true;
+            data: {
+              symbol: string;
+              securityName: string;
+              market: string;
+              currency: string;
+              unitPrice: number;
+            };
+          }
+        | { ok: false; message?: string };
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(
+          "message" in payload && payload.message
+            ? payload.message
+            : "Failed to load security data.",
+        );
+      }
+
+      if (symbolRef.current) {
+        symbolRef.current.value = payload.data.symbol;
+      }
+      if (securityNameRef.current) {
+        securityNameRef.current.value = payload.data.securityName;
+      }
+      if (marketRef.current) {
+        marketRef.current.value = payload.data.market;
+      }
+      if (currencyRef.current) {
+        currencyRef.current.value = payload.data.currency;
+      }
+      if (unitPriceRef.current) {
+        unitPriceRef.current.value = payload.data.unitPrice.toFixed(6);
+      }
+      if (sideRef.current) {
+        sideRef.current.value = defaultSide;
+      }
+
+      toast.success(`Loaded ${payload.data.symbol} market data.`);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load security data.",
+      );
+    } finally {
+      setLookupPending(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="secondary" className={triggerClassName}>
-          Add Trade
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -112,7 +198,23 @@ export function CreateTransactionDialog({ triggerClassName }: Props) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="symbol">Symbol</Label>
-              <Input id="symbol" name="symbol" placeholder="AAPL" required />
+              <Input
+                id="symbol"
+                name="symbol"
+                placeholder="AAPL"
+                defaultValue={initialValues?.symbol}
+                ref={symbolRef}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void handleSymbolLookup();
+                  }
+                }}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Press Enter to auto-fill security data.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="securityName">Security Name</Label>
@@ -120,6 +222,8 @@ export function CreateTransactionDialog({ triggerClassName }: Props) {
                 id="securityName"
                 name="securityName"
                 placeholder="Apple Inc."
+                defaultValue={initialValues?.securityName}
+                ref={securityNameRef}
               />
             </div>
           </div>
@@ -130,7 +234,8 @@ export function CreateTransactionDialog({ triggerClassName }: Props) {
               <select
                 id="market"
                 name="market"
-                defaultValue="NASDAQ"
+                defaultValue={initialValues?.market ?? "NASDAQ"}
+                ref={marketRef}
                 className="border-input bg-background ring-offset-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <option value="KRX">KRX</option>
@@ -144,7 +249,8 @@ export function CreateTransactionDialog({ triggerClassName }: Props) {
               <select
                 id="currency"
                 name="currency"
-                defaultValue="USD"
+                defaultValue={initialValues?.currency ?? "USD"}
+                ref={currencyRef}
                 className="border-input bg-background ring-offset-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <option value="USD">USD</option>
@@ -156,7 +262,8 @@ export function CreateTransactionDialog({ triggerClassName }: Props) {
               <select
                 id="side"
                 name="side"
-                defaultValue="buy"
+                defaultValue={initialValues?.side ?? "buy"}
+                ref={sideRef}
                 className="border-input bg-background ring-offset-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 <option value="buy">BUY</option>
@@ -210,6 +317,7 @@ export function CreateTransactionDialog({ triggerClassName }: Props) {
                 min="0"
                 step="0.000001"
                 placeholder="185.25"
+                ref={unitPriceRef}
                 required
               />
             </div>

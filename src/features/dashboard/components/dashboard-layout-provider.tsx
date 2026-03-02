@@ -24,6 +24,7 @@ type DashboardLayoutContextValue = {
     targetModuleId?: string | null,
   ) => void;
   moveToArea: (moduleId: string, nextArea: DashboardArea) => void;
+  setAreaModules: (area: DashboardArea, moduleIds: string[]) => void;
   setModuleWidth: (moduleId: string, widthPresetId: string) => void;
   resetLayout: () => void;
 };
@@ -41,6 +42,7 @@ function sanitizeLayout(
   layout: DashboardLayoutState,
   defaultLayout: DashboardLayoutState,
 ) {
+  const lockedSummaryIds = new Set(defaultLayout.summary);
   const allKnown = new Set([
     ...defaultLayout.summary,
     ...defaultLayout.workspace,
@@ -51,9 +53,11 @@ function sanitizeLayout(
     items.filter((item, index) => allKnown.has(item) && items.indexOf(item) === index);
 
   const next: DashboardLayoutState = {
-    summary: normalizeArea(layout.summary),
-    workspace: normalizeArea(layout.workspace),
-    hidden: normalizeArea(layout.hidden),
+    summary: [...defaultLayout.summary],
+    workspace: normalizeArea(layout.workspace).filter(
+      (item) => !lockedSummaryIds.has(item),
+    ),
+    hidden: normalizeArea(layout.hidden).filter((item) => !lockedSummaryIds.has(item)),
     widths:
       layout.widths && typeof layout.widths === "object" ? { ...layout.widths } : {},
   };
@@ -190,6 +194,17 @@ export function DashboardLayoutProvider({
           return {
             ...cleared,
             [nextArea]: [...cleared[nextArea], moduleId],
+          };
+        });
+      },
+      setAreaModules(area, moduleIds) {
+        setLayout((current) => {
+          const currentAreaSet = new Set(current[area]);
+          const ordered = moduleIds.filter((moduleId) => currentAreaSet.has(moduleId));
+          const remaining = current[area].filter((moduleId) => !ordered.includes(moduleId));
+          return {
+            ...current,
+            [area]: [...ordered, ...remaining],
           };
         });
       },

@@ -1,6 +1,8 @@
 "use client";
 
-import { LayoutGrid, RotateCcw } from "lucide-react";
+import Sortable from "sortablejs";
+import { GripVertical, LayoutGrid, RotateCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +16,8 @@ import { useDashboardLayout } from "@/features/dashboard/components/dashboard-la
 import { dashboardModuleRegistry } from "@/features/dashboard/registry";
 import type { DashboardArea } from "@/features/dashboard/types";
 
+const CUSTOMIZABLE_AREAS: DashboardArea[] = ["workspace", "hidden"];
+
 const AREA_LABELS: Record<DashboardArea, string> = {
   workspace: "Workspace Row",
   hidden: "Hidden",
@@ -22,29 +26,17 @@ const AREA_LABELS: Record<DashboardArea, string> = {
 
 type AreaColumnProps = {
   area: DashboardArea;
+  setAreaRef: (area: DashboardArea, element: HTMLDivElement | null) => void;
 };
 
-function AreaColumn({ area }: AreaColumnProps) {
-  const { layout, moveModule, moveToArea, setModuleWidth } = useDashboardLayout();
+function AreaColumn({ area, setAreaRef }: AreaColumnProps) {
+  const { layout, moveToArea, setModuleWidth } = useDashboardLayout();
   const moduleIds = layout[area];
 
   return (
-    <div
-      className="space-y-3 rounded-xl border border-border/70 p-4"
-      onDragOver={(event) => {
-        event.preventDefault();
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const moduleId = event.dataTransfer.getData("text/dashboard-module-id");
-        if (!moduleId) {
-          return;
-        }
-        moveModule(moduleId, area);
-      }}
-    >
+    <div className="space-y-3 rounded-xl border border-border/70 p-4">
       <div className="text-sm font-medium">{AREA_LABELS[area]}</div>
-      <div className="space-y-2">
+      <div ref={(element) => setAreaRef(area, element)} className="space-y-2">
         {moduleIds.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
             No modules in this area.
@@ -59,28 +51,22 @@ function AreaColumn({ area }: AreaColumnProps) {
             return (
               <div
                 key={moduleId}
+                data-id={moduleId}
+                data-module-id={moduleId}
                 className="rounded-lg border border-border/70 bg-muted/20 p-3"
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData("text/dashboard-module-id", moduleId);
-                  event.dataTransfer.effectAllowed = "move";
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const draggedModuleId = event.dataTransfer.getData(
-                    "text/dashboard-module-id",
-                  );
-                  if (!draggedModuleId) {
-                    return;
-                  }
-                  moveModule(draggedModuleId, area, moduleId);
-                }}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium">{moduleDefinition.title}</div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="module-sort-handle cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground active:cursor-grabbing"
+                      aria-label={`Reorder ${moduleDefinition.title}`}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <GripVertical className="size-4" />
+                    </div>
+                    <div className="text-sm font-medium">{moduleDefinition.title}</div>
+                  </div>
                   <div className="text-xs text-muted-foreground">Drag to reorder</div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -133,10 +119,77 @@ function AreaColumn({ area }: AreaColumnProps) {
 }
 
 export function DashboardCustomizeDialog() {
-  const { resetLayout } = useDashboardLayout();
+  const { resetLayout, setAreaModules } = useDashboardLayout();
+  const areaRefs = useRef<Partial<Record<DashboardArea, HTMLDivElement | null>>>({});
+  const sortableRefs = useRef<Sortable[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const syncAreaOrders = () => {
+      for (const area of CUSTOMIZABLE_AREAS) {
+        const sortable = sortableRefs.current.find(
+          (instance) => instance.el === areaRefs.current[area],
+        );
+        if (!sortable) {
+          continue;
+        }
+
+        setAreaModules(area, sortable.toArray());
+      }
+    };
+
+    let cancelled = false;
+    let frameId = 0;
+
+    frameId = window.requestAnimationFrame(() => {
+      if (cancelled) {
+        return;
+      }
+
+      sortableRefs.current = CUSTOMIZABLE_AREAS.flatMap((area) => {
+        const container = areaRefs.current[area];
+        if (!container) {
+          return [];
+        }
+
+        return [
+          Sortable.create(container, {
+            group: "dashboard-modules",
+            sort: true,
+            animation: 160,
+            forceFallback: true,
+            fallbackOnBody: true,
+            fallbackTolerance: 4,
+            handle: ".module-sort-handle",
+            draggable: "[data-module-id]",
+            dataIdAttr: "data-id",
+            ghostClass: "sortable-ghost",
+            chosenClass: "sortable-chosen",
+            dragClass: "sortable-drag",
+            onEnd: syncAreaOrders,
+            onAdd: syncAreaOrders,
+            onUpdate: syncAreaOrders,
+          }),
+        ];
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frameId);
+      for (const sortable of sortableRefs.current) {
+        sortable.destroy();
+      }
+      sortableRefs.current = [];
+    };
+  }, [open, setAreaModules]);
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10">
           <LayoutGrid className="size-4" />
@@ -151,8 +204,18 @@ export function DashboardCustomizeDialog() {
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 lg:grid-cols-2">
-          <AreaColumn area="workspace" />
-          <AreaColumn area="hidden" />
+          <AreaColumn
+            area="workspace"
+            setAreaRef={(area, element) => {
+              areaRefs.current[area] = element;
+            }}
+          />
+          <AreaColumn
+            area="hidden"
+            setAreaRef={(area, element) => {
+              areaRefs.current[area] = element;
+            }}
+          />
         </div>
         <div className="flex justify-end">
           <Button type="button" variant="outline" onClick={resetLayout}>

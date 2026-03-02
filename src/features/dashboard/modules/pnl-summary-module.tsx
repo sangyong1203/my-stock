@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import {
   Card,
   CardDescription,
@@ -9,24 +9,6 @@ import {
 } from "@/components/ui/card";
 import { formatCurrency } from "@/features/dashboard/lib/format";
 import type { DashboardModuleProps } from "@/features/dashboard/types";
-
-export function TotalMarketValueModule({ model }: DashboardModuleProps) {
-  return (
-    <Card className="h-full border-border/70">
-      <CardHeader className="flex h-full flex-col justify-between pb-2">
-        <CardDescription>Total Market Value</CardDescription>
-        <CardTitle className="flex items-center gap-2 text-xl">
-          <Wallet className="size-5 text-emerald-500" />
-          {formatCurrency(model.summaries.marketValue)}
-        </CardTitle>
-        <CardDescription>Total Cost Basis</CardDescription>
-        <CardTitle className="text-xl">
-          {formatCurrency(model.summaries.invested)}
-        </CardTitle>
-      </CardHeader>
-    </Card>
-  );
-}
 
 function PnlMetricRow({
   label,
@@ -40,10 +22,12 @@ function PnlMetricRow({
   const positive = amount >= 0;
 
   return (
-    <div className="space-y-1">
-      <CardDescription>{label}</CardDescription>
-      <div className="flex items-center justify-between gap-3">
-        <CardTitle className="flex items-center gap-2 text-xl">
+    <div
+      className={`module-pnl-row module-pnl-row-${label.toLowerCase().replace(/\s+|\/+/g, "-")} space-y-1`}
+    >
+      <CardDescription className="module-pnl-row-label">{label}</CardDescription>
+      <div className="module-pnl-row-values flex items-center justify-between gap-3">
+        <CardTitle className="module-pnl-row-amount flex items-center gap-2 text-xl">
           {positive ? (
             <TrendingUp className="size-5 text-emerald-500" />
           ) : (
@@ -54,7 +38,7 @@ function PnlMetricRow({
           </span>
         </CardTitle>
         <span
-          className={`text-sm font-medium ${
+          className={`module-pnl-row-rate text-sm font-medium ${
             rate >= 0 ? "text-emerald-500" : "text-rose-500"
           }`}
         >
@@ -67,8 +51,8 @@ function PnlMetricRow({
 
 export function PnlSummaryModule({ model }: DashboardModuleProps) {
   return (
-    <Card className="h-full border-border/70">
-      <CardHeader className="flex h-full flex-col justify-between gap-4 pb-2">
+    <Card className="module-card module-pnl-summary h-full max-h-[180px] border-border/70">
+      <CardHeader className="module-card-header module-pnl-summary-header flex h-full flex-col justify-between gap-4 pb-2">
         <PnlMetricRow
           label="Unrealized P/L"
           amount={model.summaries.unrealizedPnl}

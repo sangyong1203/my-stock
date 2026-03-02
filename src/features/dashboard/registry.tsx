@@ -3,16 +3,27 @@ import type {
   DashboardModuleDefinition,
 } from "@/features/dashboard/types";
 import {
+  MarketIndexesModule,
   NextBuildStepsModule,
   OpenPositionsModule,
-  RecentTransactionsModule,
-} from "@/features/dashboard/modules/panel-modules";
-import {
   PnlSummaryModule,
+  RecentTransactionsModule,
+  StockPriceChartModule,
   TotalMarketValueModule,
-} from "@/features/dashboard/modules/summary-modules";
+} from "@/features/dashboard/modules";
 
 export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> = {
+  "market-indexes": {
+    id: "market-indexes",
+    title: "Market Indexes",
+    component: MarketIndexesModule,
+    defaultWidthPreset: "md",
+    widthPresets: [
+      { id: "sm", label: "S", className: "w-[560px] min-w-[560px]" },
+      { id: "md", label: "M", className: "w-[640px] min-w-[640px]" },
+      { id: "lg", label: "L", className: "w-[760px] min-w-[760px]" },
+    ],
+  },
   "total-market-value": {
     id: "total-market-value",
     title: "Total Market Value",
@@ -57,6 +68,17 @@ export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> 
       { id: "lg", label: "L", className: "w-[460px] min-w-[460px]" },
     ],
   },
+  "stock-price-chart": {
+    id: "stock-price-chart",
+    title: "Stock Price Chart",
+    component: StockPriceChartModule,
+    defaultWidthPreset: "md",
+    widthPresets: [
+      { id: "sm", label: "S", className: "w-[520px] min-w-[520px]" },
+      { id: "md", label: "M", className: "w-[680px] min-w-[680px]" },
+      { id: "lg", label: "L", className: "w-[860px] min-w-[860px]" },
+    ],
+  },
   "next-build-steps": {
     id: "next-build-steps",
     title: "Next Build Steps",
@@ -73,10 +95,16 @@ export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> 
 // Add a module component above, then place its id into any area below.
 const dashboardModuleOrder = {
   summary: [
+    "market-indexes",
     "total-market-value",
     "pnl-summary",
   ],
-  workspace: ["open-positions", "recent-transactions", "next-build-steps"],
+  workspace: [
+    "open-positions",
+    "stock-price-chart",
+    "recent-transactions",
+    "next-build-steps",
+  ],
   hidden: [],
 } as const;
 

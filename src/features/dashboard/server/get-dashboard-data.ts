@@ -1,6 +1,7 @@
 ﻿import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { portfolios, positions, priceSnapshots, securities, transactions } from "@/db/schema";
+import { getMarketIndexSnapshots } from "@/features/market-data/server/market-index-service";
 import {
   EMPTY_POSITION,
   type PositionState,
@@ -31,11 +32,33 @@ export type DashboardTransactionRow = {
   realizedReturnRate: number | null;
 };
 
+export type DashboardChartTransactionRow = {
+  id: string;
+  symbol: string;
+  market: string;
+  side: "buy" | "sell";
+  quantity: number;
+  unitPrice: number;
+  tradeDate: Date;
+};
+
+export type DashboardMarketIndexRow = {
+  id: string;
+  label: string;
+  value: number;
+  change: number;
+  changePercent: number;
+  sparkline: number[];
+  asOf: Date | null;
+};
+
 export type DashboardData = {
   source: "database" | "demo";
   warning?: string;
   positions: DashboardPositionRow[];
   recentTransactions: DashboardTransactionRow[];
+  chartTransactions: DashboardChartTransactionRow[];
+  marketIndexes: DashboardMarketIndexRow[];
   realizedPnl: number;
   realizedReturnRate: number;
   userId: string | null;
@@ -75,6 +98,27 @@ const FALLBACK_DATA: DashboardData = {
     },
   ],
   recentTransactions: [],
+  chartTransactions: [],
+  marketIndexes: [
+    {
+      id: "nasdaq",
+      label: "NASDAQ",
+      value: 22668.21,
+      change: -210.17,
+      changePercent: -0.91,
+      sparkline: [22580, 22530, 22590, 22640, 22610, 22668.21],
+      asOf: null,
+    },
+    {
+      id: "sp500",
+      label: "S&P 500",
+      value: 6878.88,
+      change: -29.98,
+      changePercent: -0.43,
+      sparkline: [6892, 6884, 6870, 6886, 6864, 6878.88],
+      asOf: null,
+    },
+  ],
   realizedPnl: 0,
   realizedReturnRate: 0,
   userId: null,
@@ -195,6 +239,23 @@ async function getAllTransactionsForRealizedPnl(portfolioId: string) {
     );
 }
 
+async function getAllTransactionsForChart(portfolioId: string) {
+  return db
+    .select({
+      id: transactions.id,
+      side: transactions.side,
+      quantity: transactions.quantity,
+      unitPrice: transactions.unitPrice,
+      tradeDate: transactions.tradeDate,
+      symbol: securities.symbol,
+      market: securities.market,
+    })
+    .from(transactions)
+    .innerJoin(securities, eq(transactions.securityId, securities.id))
+    .where(eq(transactions.portfolioId, portfolioId))
+    .orderBy(asc(transactions.tradeDate), asc(transactions.createdAt));
+}
+
 function calculateRealizedMetrics(
   allTransactionRows: Awaited<ReturnType<typeof getAllTransactionsForRealizedPnl>>,
 ) {
@@ -258,6 +319,20 @@ function buildDashboardTransactions(
   }));
 }
 
+function buildDashboardChartTransactions(
+  transactionRows: Awaited<ReturnType<typeof getAllTransactionsForChart>>,
+): DashboardChartTransactionRow[] {
+  return transactionRows.map((row) => ({
+    id: row.id,
+    symbol: row.symbol,
+    market: row.market,
+    side: row.side,
+    quantity: Number(row.quantity),
+    unitPrice: Number(row.unitPrice),
+    tradeDate: row.tradeDate,
+  }));
+}
+
 function getDashboardWarning(
   userId: string | null | undefined,
   dashboardPositions: DashboardPositionRow[],
@@ -273,8 +348,13 @@ function getDashboardWarning(
 }
 
 export async function getDashboardData(userId?: string | null): Promise<DashboardData> {
+  const marketIndexes = await getMarketIndexSnapshots().catch(() => FALLBACK_DATA.marketIndexes);
+
   if (!process.env.DATABASE_URL) {
-    return FALLBACK_DATA;
+    return {
+      ...FALLBACK_DATA,
+      marketIndexes,
+    };
   }
 
   try {
@@ -299,17 +379,21 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
     );
     const recentTransactionRows = await getRecentTransactions(portfolio.id);
     const allTransactionRows = await getAllTransactionsForRealizedPnl(portfolio.id);
+    const chartTransactionRows = await getAllTransactionsForChart(portfolio.id);
     const { realizedPnl, realizedReturnRate, realizedByTransactionId } =
       calculateRealizedMetrics(allTransactionRows);
     const recentTransactions = buildDashboardTransactions(
       recentTransactionRows,
       realizedByTransactionId,
     );
+    const chartTransactions = buildDashboardChartTransactions(chartTransactionRows);
 
     return {
       source,
       positions: dashboardPositions,
       recentTransactions,
+      chartTransactions,
+      marketIndexes,
       realizedPnl,
       realizedReturnRate,
       userId: effectiveUserId,
@@ -320,6 +404,7 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
       error instanceof Error ? error.message : "Failed to load dashboard data";
     return {
       ...FALLBACK_DATA,
+      marketIndexes,
       warning: `Database query failed (${message}). Showing demo data.`,
     };
   }
