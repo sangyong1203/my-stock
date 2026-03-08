@@ -3,6 +3,13 @@ import type { NextAuthOptions } from "next-auth";
 import GitHubProvider from "next-auth/providers/github";
 import { db, schema } from "@/db";
 
+const githubClientId = process.env.GITHUB_ID;
+const githubClientSecret = process.env.GITHUB_SECRET;
+
+if (!githubClientId || !githubClientSecret) {
+  throw new Error("Missing GITHUB_ID or GITHUB_SECRET environment variable.");
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: DrizzleAdapter(db, {
     usersTable: schema.users,
@@ -16,8 +23,8 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     GitHubProvider({
-      clientId: process.env.GITHUB_ID ?? "",
-      clientSecret: process.env.GITHUB_SECRET ?? "",
+      clientId: githubClientId,
+      clientSecret: githubClientSecret,
     }),
   ],
   callbacks: {

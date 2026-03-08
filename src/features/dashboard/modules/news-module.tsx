@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -10,22 +10,10 @@ import {
 } from "@/components/ui/card";
 import { useDashboardSelection } from "@/features/dashboard/components/dashboard-selection-provider";
 import type { DashboardModuleProps } from "@/features/dashboard/types";
-
-type NewsItem = {
-  id: string;
-  headline: string;
-  summary: string;
-  source: string;
-  category: string;
-  url: string;
-  imageUrl: string | null;
-  publishedAt: string;
-  symbol?: string;
-};
-
-type NewsResponse =
-  | { ok: true; mode: "general" | "portfolio"; items: NewsItem[] }
-  | { ok: false; message?: string };
+import {
+  type DashboardNewsItem,
+  useDashboardNews,
+} from "@/features/market-data/components/dashboard-news-provider";
 
 type NewsTab = "general" | "portfolio";
 
@@ -48,7 +36,7 @@ function NewsList({
   items,
   emptyText,
 }: {
-  items: NewsItem[];
+  items: DashboardNewsItem[];
   emptyText: string;
 }) {
   if (items.length === 0) {
@@ -70,8 +58,7 @@ function NewsList({
           className="block rounded-xl border border-border/70 bg-muted/20 p-3 transition hover:border-primary/40 hover:bg-muted/30"
         >
           <div className="mb-1 text-xs text-muted-foreground">
-            {item.source} · {item.category || "news"} ·{" "}
-            {item.symbol ? `${item.symbol} · ` : ""}
+            {item.source} · {item.category || "news"} · {item.symbol ? `${item.symbol} · ` : ""}
             {formatPublishedAt(item.publishedAt)}
           </div>
           <div className="line-clamp-2 text-sm font-medium">{item.headline}</div>
@@ -88,11 +75,8 @@ function NewsList({
 
 export function NewsModule({ model }: DashboardModuleProps) {
   const { selectedSecurity, setSelectedSecurity } = useDashboardSelection();
+  const { generalItems, portfolioItems, loading, error } = useDashboardNews();
   const [activeTab, setActiveTab] = useState<NewsTab>("general");
-  const [generalItems, setGeneralItems] = useState<NewsItem[]>([]);
-  const [portfolioItems, setPortfolioItems] = useState<NewsItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const positions = model.dashboard.positions;
   const symbols = useMemo(
@@ -106,7 +90,6 @@ export function NewsModule({ model }: DashboardModuleProps) {
       ),
     [positions],
   );
-  const symbolsKey = symbols.join(",");
   const activeSecurity = useMemo(() => {
     const picked = positions.find(
       (position) =>
@@ -124,70 +107,6 @@ export function NewsModule({ model }: DashboardModuleProps) {
       });
     }
   }, [positions, selectedSecurity, setSelectedSecurity]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const [generalResponse, portfolioResponse] = await Promise.all([
-          fetch("/api/market-data/news?mode=general", { cache: "no-store" }),
-          fetch(
-            `/api/market-data/news?mode=portfolio&symbols=${encodeURIComponent(
-              symbolsKey,
-            )}`,
-            { cache: "no-store" },
-          ),
-        ]);
-
-        const [generalPayload, portfolioPayload] = (await Promise.all([
-          generalResponse.json(),
-          portfolioResponse.json(),
-        ])) as [NewsResponse, NewsResponse];
-
-        if (!generalResponse.ok || !generalPayload.ok) {
-          throw new Error(
-            "message" in generalPayload && generalPayload.message
-              ? generalPayload.message
-              : "Failed to load general news.",
-          );
-        }
-        if (!portfolioResponse.ok || !portfolioPayload.ok) {
-          throw new Error(
-            "message" in portfolioPayload && portfolioPayload.message
-              ? portfolioPayload.message
-              : "Failed to load portfolio news.",
-          );
-        }
-
-        if (!cancelled) {
-          setGeneralItems(generalPayload.items);
-          setPortfolioItems(portfolioPayload.items);
-        }
-      } catch (fetchError) {
-        if (!cancelled) {
-          setGeneralItems([]);
-          setPortfolioItems([]);
-          setError(
-            fetchError instanceof Error ? fetchError.message : "Failed to load news.",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [symbolsKey]);
 
   return (
     <Card className="module-card module-news flex h-full flex-col overflow-hidden border-border/70">
@@ -250,4 +169,3 @@ export function NewsModule({ model }: DashboardModuleProps) {
     </Card>
   );
 }
-

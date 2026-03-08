@@ -23,8 +23,6 @@ type DashboardLayoutContextValue = {
     nextArea: DashboardArea,
     targetModuleId?: string | null,
   ) => void;
-  moveToArea: (moduleId: string, nextArea: DashboardArea) => void;
-  setAreaModules: (area: DashboardArea, moduleIds: string[]) => void;
   setModuleWidth: (moduleId: string, widthPresetId: string) => void;
   resetLayout: () => void;
 };
@@ -210,42 +208,6 @@ export function DashboardLayoutProvider({
           }
 
           return { ...cleared, [nextArea]: nextList };
-        });
-      },
-      moveToArea(moduleId, nextArea) {
-        setLayout((current) => {
-          const cleared = removeModule(current, moduleId);
-          return {
-            ...cleared,
-            [nextArea]: [...cleared[nextArea], moduleId],
-          };
-        });
-      },
-      setAreaModules(area, moduleIds) {
-        setLayout((current) => {
-          const ordered = Array.from(new Set(moduleIds));
-          const areaOrder: DashboardArea[] = [
-            "summary",
-            "summaryHidden",
-            "workspace",
-            "workspaceHidden",
-          ];
-          const next = {
-            summary: [...current.summary],
-            summaryHidden: [...current.summaryHidden],
-            workspace: [...current.workspace],
-            workspaceHidden: [...current.workspaceHidden],
-            widths: { ...current.widths },
-          };
-
-          for (const areaKey of areaOrder) {
-            next[areaKey] = next[areaKey].filter((moduleId) => !ordered.includes(moduleId));
-          }
-
-          return {
-            ...next,
-            [area]: ordered,
-          };
         });
       },
       setModuleWidth(moduleId, widthPresetId) {

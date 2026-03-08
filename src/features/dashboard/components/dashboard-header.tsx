@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { SessionControls } from "@/components/auth/session-controls";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
@@ -19,24 +19,13 @@ import {
   getDashboardModuleWidthPx,
 } from "@/features/dashboard/registry";
 import { AutoSyncMarketPrices } from "@/features/market-data/components/auto-sync-market-prices";
+import { useDashboardNews } from "@/features/market-data/components/dashboard-news-provider";
 import { MarketPriceSyncStatus } from "@/features/market-data/components/market-price-sync-status";
 import type { DashboardPageModel } from "@/features/dashboard/types";
 
 type Props = {
   model: DashboardPageModel;
 };
-
-type HeaderNewsItem = {
-  id: string;
-  headline: string;
-  publishedAt: string;
-  source?: string;
-  symbol?: string;
-};
-
-type HeaderNewsResponse =
-  | { ok: true; mode: "general"; items: HeaderNewsItem[] }
-  | { ok: false; message?: string };
 
 function isSameLocalDay(left: Date, right: Date) {
   return (
@@ -46,7 +35,7 @@ function isSameLocalDay(left: Date, right: Date) {
   );
 }
 
-function getTickerPrefix(item: HeaderNewsItem) {
+function getTickerPrefix(item: { symbol?: string; source?: string }) {
   const symbol = item.symbol?.trim();
   if (symbol) {
     return symbol;
@@ -59,10 +48,8 @@ function getTickerPrefix(item: HeaderNewsItem) {
 export function DashboardHeader({ model }: Props) {
   const { dashboard, displayName, isAuthenticated } = model;
   const { layout } = useDashboardLayout();
+  const { generalItems } = useDashboardNews();
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
-  const [headerNewsItems, setHeaderNewsItems] = useState<HeaderNewsItem[]>(
-    [],
-  );
   const modeLabel =
     dashboard.source === "database" ? "Portfolio Mode" : "Demo Mode";
   const modeDescription =
@@ -90,57 +77,28 @@ export function DashboardHeader({ model }: Props) {
       </div>
     );
   });
+  const todayGeneralItems = useMemo(() => {
+    const today = new Date();
+    return generalItems.filter((item) => {
+      const publishedAt = new Date(item.publishedAt);
+      return !Number.isNaN(publishedAt.getTime()) && isSameLocalDay(publishedAt, today);
+    });
+  }, [generalItems]);
   const tickerText = useMemo(
     () =>
-      headerNewsItems
+      todayGeneralItems
         .filter((item) => item.headline)
         .map((item) => `[ ${getTickerPrefix(item)} ] ${item.headline}`)
         .join(""),
-    [headerNewsItems],
+    [todayGeneralItems],
   );
   const tickerItems = useMemo(
     () =>
-      headerNewsItems
+      todayGeneralItems
         .filter((item) => item.headline)
         .map((item) => `[ ${getTickerPrefix(item)} ] ${item.headline}`),
-    [headerNewsItems],
+    [todayGeneralItems],
   );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      try {
-        const response = await fetch("/api/market-data/news?mode=general", {
-          cache: "no-store",
-        });
-        const payload = (await response.json()) as HeaderNewsResponse;
-        if (!response.ok || !payload.ok) {
-          return;
-        }
-
-        const today = new Date();
-        const todayItems = payload.items.filter((item) => {
-          const publishedAt = new Date(item.publishedAt);
-          return !Number.isNaN(publishedAt.getTime()) && isSameLocalDay(publishedAt, today);
-        });
-
-        if (!cancelled) {
-          setHeaderNewsItems(todayItems);
-        }
-      } catch {
-        if (!cancelled) {
-          setHeaderNewsItems([]);
-        }
-      }
-    };
-
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   return (
     <div className="dashboard-header-wrap relative overflow-visible">
@@ -227,7 +185,7 @@ export function DashboardHeader({ model }: Props) {
               </div>
             ) : (
               <div className="flex h-full items-center text-xs text-zinc-400">
-                No portfolio news today.
+                No general news today.
               </div>
             )}
           </div>

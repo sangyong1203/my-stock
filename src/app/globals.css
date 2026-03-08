@@ -221,20 +221,6 @@
     background: transparent;
   }
 
-  .sortable-ghost {
-    background: color-mix(in oklab, var(--primary) 8%, transparent);
-  }
-
-  .sortable-chosen {
-    opacity: 0.18 !important;
-  }
-
-  .sortable-drag {
-    opacity: 1;
-    background: var(--card);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 18px 48px -24px rgb(0 0 0 / 0.7);
-  }
 }
 
 @keyframes dashboard-portfolio-news-marquee {

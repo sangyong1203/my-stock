@@ -122,8 +122,6 @@ const dashboardModuleOrder = {
   workspaceHidden: [],
 } as const;
 
-export const dashboardSummaryModuleIds = [...dashboardModuleOrder.summary];
-
 export function createDefaultDashboardLayout(): DashboardLayoutState {
   return {
     summary: [...dashboardModuleOrder.summary],
@@ -137,25 +135,6 @@ export function createDefaultDashboardLayout(): DashboardLayoutState {
       ]),
     ),
   };
-}
-
-export function getDashboardModuleWidthClass(
-  moduleId: string,
-  widthPresetId: string | undefined,
-) {
-  const moduleDefinition = dashboardModuleRegistry[moduleId];
-  if (!moduleDefinition) {
-    return "w-[360px] min-w-[360px]";
-  }
-
-  const matched =
-    moduleDefinition.widthPresets.find((preset) => preset.id === widthPresetId) ??
-    moduleDefinition.widthPresets.find(
-      (preset) => preset.id === moduleDefinition.defaultWidthPreset,
-    ) ??
-    moduleDefinition.widthPresets[0];
-
-  return matched?.className ?? "w-[360px] min-w-[360px]";
 }
 
 function getPresetWidthPx(className: string) {

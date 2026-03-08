@@ -3,6 +3,7 @@ import { DashboardLayoutProvider } from "@/features/dashboard/components/dashboa
 import { DashboardSelectionProvider } from "@/features/dashboard/components/dashboard-selection-provider";
 import { DashboardWorkspace } from "@/features/dashboard/components/dashboard-workspace";
 import type { DashboardPageModel } from "@/features/dashboard/types";
+import { DashboardNewsProvider } from "@/features/market-data/components/dashboard-news-provider";
 import { MarketPriceSyncProvider } from "@/features/market-data/components/market-price-sync-provider";
 
 type Props = {
@@ -10,6 +11,13 @@ type Props = {
 };
 
 export function DashboardPage({ model }: Props) {
+  const symbols = Array.from(
+    new Set(
+      model.dashboard.positions
+        .map((position) => position.symbol.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  );
   const initialSecurity = model.dashboard.positions[0]
     ? {
         symbol: model.dashboard.positions[0].symbol,
@@ -26,10 +34,12 @@ export function DashboardPage({ model }: Props) {
           defaultLayout={model.initialLayout}
         >
           <MarketPriceSyncProvider storageScope={model.syncStorageScope}>
-            <DashboardSelectionProvider initialSecurity={initialSecurity}>
-              <DashboardHeader model={model} />
-              <DashboardWorkspace model={model} />
-            </DashboardSelectionProvider>
+            <DashboardNewsProvider symbols={symbols}>
+              <DashboardSelectionProvider initialSecurity={initialSecurity}>
+                <DashboardHeader model={model} />
+                <DashboardWorkspace model={model} />
+              </DashboardSelectionProvider>
+            </DashboardNewsProvider>
           </MarketPriceSyncProvider>
         </DashboardLayoutProvider>
       </div>
