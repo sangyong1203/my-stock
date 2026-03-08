@@ -1,8 +1,7 @@
 "use client";
 
-import Sortable from "sortablejs";
 import { GripVertical, LayoutGrid, RotateCcw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,30 +15,62 @@ import { useDashboardLayout } from "@/features/dashboard/components/dashboard-la
 import { dashboardModuleRegistry } from "@/features/dashboard/registry";
 import type { DashboardArea } from "@/features/dashboard/types";
 
-const CUSTOMIZABLE_AREAS: DashboardArea[] = ["workspace", "hidden"];
+const CUSTOMIZABLE_AREAS: DashboardArea[] = [
+  "summary",
+  "summaryHidden",
+  "workspace",
+  "workspaceHidden",
+];
 
 const AREA_LABELS: Record<DashboardArea, string> = {
-  workspace: "Workspace Row",
-  hidden: "Hidden",
   summary: "Summary Row",
+  summaryHidden: "Summary Hidden",
+  workspace: "Workspace Row",
+  workspaceHidden: "Workspace Hidden",
 };
+
+type DragState = {
+  moduleId: string;
+  fromArea: DashboardArea;
+} | null;
 
 type AreaColumnProps = {
   area: DashboardArea;
-  setAreaRef: (area: DashboardArea, element: HTMLDivElement | null) => void;
+  dragState: DragState;
+  onStartDrag: (moduleId: string, fromArea: DashboardArea) => void;
+  onDropToArea: (targetArea: DashboardArea) => void;
+  onDropBeforeModule: (targetArea: DashboardArea, targetModuleId: string) => void;
+  onClearDrag: () => void;
 };
 
-function AreaColumn({ area, setAreaRef }: AreaColumnProps) {
-  const { layout, moveToArea, setModuleWidth } = useDashboardLayout();
+function AreaColumn({
+  area,
+  dragState,
+  onStartDrag,
+  onDropToArea,
+  onDropBeforeModule,
+  onClearDrag,
+}: AreaColumnProps) {
+  const { layout, setModuleWidth } = useDashboardLayout();
   const moduleIds = layout[area];
 
   return (
     <div className="space-y-3 rounded-xl border border-border/70 p-4">
       <div className="text-sm font-medium">{AREA_LABELS[area]}</div>
-      <div ref={(element) => setAreaRef(area, element)} className="space-y-2">
+      <div
+        className="min-h-24 space-y-2 rounded-lg border border-dashed border-border/50 p-2"
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          onDropToArea(area);
+        }}
+      >
         {moduleIds.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
-            No modules in this area.
+          <div className="rounded-lg px-3 py-6 text-center text-sm text-muted-foreground">
+            Drag modules here.
           </div>
         ) : (
           moduleIds.map((moduleId) => {
@@ -48,12 +79,34 @@ function AreaColumn({ area, setAreaRef }: AreaColumnProps) {
               return null;
             }
 
+            const isDragging = dragState?.moduleId === moduleId;
+
             return (
               <div
                 key={moduleId}
-                data-id={moduleId}
                 data-module-id={moduleId}
-                className="rounded-lg border border-border/70 bg-muted/20 p-3"
+                className={`rounded-lg border border-border/70 bg-muted/20 p-3 transition ${
+                  isDragging ? "opacity-40" : "opacity-100"
+                }`}
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", moduleId);
+                  onStartDrag(moduleId, area);
+                }}
+                onDragEnd={() => {
+                  window.setTimeout(onClearDrag, 0);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onDropBeforeModule(area, moduleId);
+                }}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -67,29 +120,7 @@ function AreaColumn({ area, setAreaRef }: AreaColumnProps) {
                     </div>
                     <div className="text-sm font-medium">{moduleDefinition.title}</div>
                   </div>
-                  <div className="text-xs text-muted-foreground">Drag to reorder</div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {area !== "workspace" ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => moveToArea(moduleId, "workspace")}
-                    >
-                      Move to Workspace
-                    </Button>
-                  ) : null}
-                  {area !== "hidden" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => moveToArea(moduleId, "hidden")}
-                    >
-                      Hide
-                    </Button>
-                  ) : null}
+                  <div className="text-xs text-muted-foreground">Drag to move</div>
                 </div>
                 <div className="mt-3 flex items-center gap-2">
                   <div className="text-xs text-muted-foreground">Width</div>
@@ -119,74 +150,46 @@ function AreaColumn({ area, setAreaRef }: AreaColumnProps) {
 }
 
 export function DashboardCustomizeDialog() {
-  const { resetLayout, setAreaModules } = useDashboardLayout();
-  const areaRefs = useRef<Partial<Record<DashboardArea, HTMLDivElement | null>>>({});
-  const sortableRefs = useRef<Sortable[]>([]);
+  const { layout, resetLayout, moveModule } = useDashboardLayout();
   const [open, setOpen] = useState(false);
+  const [dragState, setDragState] = useState<DragState>(null);
 
-  useEffect(() => {
-    if (!open) {
+  const onStartDrag = (moduleId: string, fromArea: DashboardArea) => {
+    setDragState({ moduleId, fromArea });
+  };
+
+  const onDropBeforeModule = (targetArea: DashboardArea, targetModuleId: string) => {
+    if (!dragState) {
       return;
     }
 
-    const syncAreaOrders = () => {
-      for (const area of CUSTOMIZABLE_AREAS) {
-        const sortable = sortableRefs.current.find(
-          (instance) => instance.el === areaRefs.current[area],
-        );
-        if (!sortable) {
-          continue;
-        }
+    if (dragState.moduleId === targetModuleId) {
+      setDragState(null);
+      return;
+    }
 
-        setAreaModules(area, sortable.toArray());
-      }
-    };
+    moveModule(dragState.moduleId, targetArea, targetModuleId);
+    setDragState(null);
+  };
 
-    let cancelled = false;
-    let frameId = 0;
+  const onDropToArea = (targetArea: DashboardArea) => {
+    if (!dragState) {
+      return;
+    }
 
-    frameId = window.requestAnimationFrame(() => {
-      if (cancelled) {
-        return;
-      }
+    const currentAreaModules = layout[targetArea];
+    const isAlreadyLastInArea =
+      dragState.fromArea === targetArea &&
+      currentAreaModules[currentAreaModules.length - 1] === dragState.moduleId;
 
-      sortableRefs.current = CUSTOMIZABLE_AREAS.flatMap((area) => {
-        const container = areaRefs.current[area];
-        if (!container) {
-          return [];
-        }
+    if (isAlreadyLastInArea) {
+      setDragState(null);
+      return;
+    }
 
-        return [
-          Sortable.create(container, {
-            group: "dashboard-modules",
-            sort: true,
-            animation: 160,
-            forceFallback: true,
-            fallbackOnBody: true,
-            fallbackTolerance: 4,
-            handle: ".module-sort-handle",
-            draggable: "[data-module-id]",
-            dataIdAttr: "data-id",
-            ghostClass: "sortable-ghost",
-            chosenClass: "sortable-chosen",
-            dragClass: "sortable-drag",
-            onEnd: syncAreaOrders,
-            onAdd: syncAreaOrders,
-            onUpdate: syncAreaOrders,
-          }),
-        ];
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(frameId);
-      for (const sortable of sortableRefs.current) {
-        sortable.destroy();
-      }
-      sortableRefs.current = [];
-    };
-  }, [open, setAreaModules]);
+    moveModule(dragState.moduleId, targetArea);
+    setDragState(null);
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -196,26 +199,25 @@ export function DashboardCustomizeDialog() {
           Customize
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Customize Dashboard</DialogTitle>
           <DialogDescription>
-            Reorder workspace modules, adjust widths, hide modules, and keep the layout in local storage.
+            Drag modules across Summary/Workspace and their own hidden lists, then reorder and resize.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 lg:grid-cols-2">
-          <AreaColumn
-            area="workspace"
-            setAreaRef={(area, element) => {
-              areaRefs.current[area] = element;
-            }}
-          />
-          <AreaColumn
-            area="hidden"
-            setAreaRef={(area, element) => {
-              areaRefs.current[area] = element;
-            }}
-          />
+          {CUSTOMIZABLE_AREAS.map((area) => (
+            <AreaColumn
+              key={area}
+              area={area}
+              dragState={dragState}
+              onStartDrag={onStartDrag}
+              onDropToArea={onDropToArea}
+              onDropBeforeModule={onDropBeforeModule}
+              onClearDrag={() => setDragState(null)}
+            />
+          ))}
         </div>
         <div className="flex justify-end">
           <Button type="button" variant="outline" onClick={resetLayout}>

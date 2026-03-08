@@ -48,6 +48,10 @@
 }
 
 :root {
+  --font-geist-sans: "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo",
+    "Malgun Gothic", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --font-geist-mono: "JetBrains Mono", "Consolas", "SFMono-Regular", "Menlo",
+    "Monaco", "Courier New", monospace;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -126,34 +130,94 @@
 }
 
 @layer components {
-  .dashboard-workspace {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklab, var(--foreground) 28%, transparent)
-      transparent;
+  :root {
+    --app-scrollbar-thumb: color-mix(
+      in oklab,
+      var(--foreground) 28%,
+      transparent
+    );
   }
 
-  .dashboard-workspace::-webkit-scrollbar {
+  .dashboard-portfolio-news-marquee {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .dashboard-portfolio-news-marquee-track {
+    display: inline-flex;
+    width: max-content;
+    gap: 40px;
+    white-space: nowrap;
+    animation: dashboard-portfolio-news-marquee 90s linear infinite;
+    will-change: transform;
+  }
+
+  *,
+  .overflow-auto,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .dashboard-workspace,
+  .dashboard-summary-row-scroll,
+  .module-news-scroll,
+  [data-slot="dialog-content"],
+  [data-slot="table-container"] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-scrollbar-thumb) transparent;
+  }
+
+  *::-webkit-scrollbar,
+  .overflow-auto::-webkit-scrollbar,
+  .overflow-x-auto::-webkit-scrollbar,
+  .overflow-y-auto::-webkit-scrollbar,
+  .dashboard-workspace::-webkit-scrollbar,
+  .dashboard-summary-row-scroll::-webkit-scrollbar,
+  .module-news-scroll::-webkit-scrollbar {
+    width: 10px;
     height: 10px;
   }
 
-  .dashboard-workspace::-webkit-scrollbar-track {
+  *::-webkit-scrollbar-track,
+  .overflow-auto::-webkit-scrollbar-track,
+  .overflow-x-auto::-webkit-scrollbar-track,
+  .overflow-y-auto::-webkit-scrollbar-track,
+  .dashboard-workspace::-webkit-scrollbar-track,
+  .dashboard-summary-row-scroll::-webkit-scrollbar-track,
+  .module-news-scroll::-webkit-scrollbar-track {
     background: transparent;
   }
 
-  .dashboard-workspace::-webkit-scrollbar-thumb {
+  *::-webkit-scrollbar-thumb,
+  .overflow-auto::-webkit-scrollbar-thumb,
+  .overflow-x-auto::-webkit-scrollbar-thumb,
+  .overflow-y-auto::-webkit-scrollbar-thumb,
+  .dashboard-workspace::-webkit-scrollbar-thumb,
+  .dashboard-summary-row-scroll::-webkit-scrollbar-thumb,
+  .module-news-scroll::-webkit-scrollbar-thumb {
     border-radius: 9999px;
     border: 2px solid transparent;
     background-clip: padding-box;
-    background-color: color-mix(in oklab, var(--foreground) 28%, transparent);
+    background-color: var(--app-scrollbar-thumb) !important;
   }
 
-  .dashboard-workspace::-webkit-scrollbar-button {
+  *::-webkit-scrollbar-button,
+  .overflow-auto::-webkit-scrollbar-button,
+  .overflow-x-auto::-webkit-scrollbar-button,
+  .overflow-y-auto::-webkit-scrollbar-button,
+  .dashboard-workspace::-webkit-scrollbar-button,
+  .dashboard-summary-row-scroll::-webkit-scrollbar-button,
+  .module-news-scroll::-webkit-scrollbar-button {
     display: none;
     width: 0;
     height: 0;
   }
 
-  .dashboard-workspace::-webkit-scrollbar-corner {
+  *::-webkit-scrollbar-corner,
+  .overflow-auto::-webkit-scrollbar-corner,
+  .overflow-x-auto::-webkit-scrollbar-corner,
+  .overflow-y-auto::-webkit-scrollbar-corner,
+  .dashboard-workspace::-webkit-scrollbar-corner,
+  .dashboard-summary-row-scroll::-webkit-scrollbar-corner,
+  .module-news-scroll::-webkit-scrollbar-corner {
     background: transparent;
   }
 
@@ -170,5 +234,14 @@
     background: var(--card);
     border-radius: var(--radius-lg);
     box-shadow: 0 18px 48px -24px rgb(0 0 0 / 0.7);
+  }
+}
+
+@keyframes dashboard-portfolio-news-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
   }
 }

@@ -16,6 +16,18 @@ type FinnhubCompanyProfileResponse = {
   finnhubIndustry?: string;
 };
 
+type FinnhubCompanyNewsResponse = {
+  id: number;
+  category: string;
+  datetime: number; // unix timestamp (seconds)
+  headline: string;
+  image: string;
+  related: string;
+  source: string;
+  summary: string;
+  url: string;
+};
+
 export type MarketQuote = {
   symbol: string;
   price: number;
@@ -29,6 +41,18 @@ export type SecurityLookupResult = {
   market: "KRX" | "NASDAQ" | "NYSE" | "ETF";
   currency: "KRW" | "USD";
   unitPrice: number;
+};
+
+export type CompanyNewsItem = {
+  id: string;
+  headline: string;
+  summary: string;
+  source: string;
+  category: string;
+  url: string;
+  imageUrl: string | null;
+  publishedAt: Date;
+  symbol?: string;
 };
 
 function getApiKey() {
@@ -152,4 +176,150 @@ export async function getFinnhubSecurityLookup(
     currency: mapCurrencyToCurrencyCode(profileData.currency),
     unitPrice: quoteData.c,
   };
+}
+
+export async function getFinnhubCompanyNews(params: {
+  symbol: string;
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+  limit?: number;
+}): Promise<CompanyNewsItem[]> {
+  const apiKey = getApiKey();
+  const symbol = params.symbol.trim().toUpperCase();
+
+  const url = new URL("https://finnhub.io/api/v1/company-news");
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("from", params.from);
+  url.searchParams.set("to", params.to);
+  url.searchParams.set("token", apiKey);
+
+  const response = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => "");
+    console.error("[Finnhub] company-news request failed", {
+      symbol,
+      status: response.status,
+      body: bodyText.slice(0, 300),
+    });
+    throw new Error(`Finnhub company-news request failed (${response.status})`);
+  }
+
+  const data = (await response.json()) as FinnhubCompanyNewsResponse[];
+  const limit = params.limit ?? 12;
+
+  return data
+    .filter((item) => item.id && item.headline && item.url)
+    .slice(0, limit)
+    .map((item) => ({
+      id: String(item.id),
+      headline: item.headline,
+      summary: item.summary ?? "",
+      source: item.source ?? "Unknown",
+      category: item.category ?? "",
+      url: item.url,
+      imageUrl: item.image || null,
+      publishedAt: new Date(item.datetime * 1000),
+      symbol,
+    }));
+}
+
+export async function getFinnhubGeneralNews(params: {
+  category?: "general" | "forex" | "crypto" | "merger";
+  limit?: number;
+}): Promise<CompanyNewsItem[]> {
+  const apiKey = getApiKey();
+  const category = params.category ?? "general";
+
+  const url = new URL("https://finnhub.io/api/v1/news");
+  url.searchParams.set("category", category);
+  url.searchParams.set("token", apiKey);
+
+  const response = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => "");
+    console.error("[Finnhub] general-news request failed", {
+      category,
+      status: response.status,
+      body: bodyText.slice(0, 300),
+    });
+    throw new Error(`Finnhub general-news request failed (${response.status})`);
+  }
+
+  const data = (await response.json()) as FinnhubCompanyNewsResponse[];
+  const limit = params.limit ?? 12;
+
+  return data
+    .filter((item) => item.id && item.headline && item.url)
+    .slice(0, limit)
+    .map((item) => ({
+      id: String(item.id),
+      headline: item.headline,
+      summary: item.summary ?? "",
+      source: item.source ?? "Unknown",
+      category: item.category ?? category,
+      url: item.url,
+      imageUrl: item.image || null,
+      publishedAt: new Date(item.datetime * 1000),
+    }));
+}
+
+export async function getFinnhubPortfolioNews(params: {
+  symbols: string[];
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+  perSymbolLimit?: number;
+  totalLimit?: number;
+}): Promise<CompanyNewsItem[]> {
+  const symbols = Array.from(
+    new Set(
+      params.symbols
+        .map((symbol) => symbol.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ).slice(0, 10);
+
+  if (symbols.length === 0) {
+    return [];
+  }
+
+  const perSymbolLimit = params.perSymbolLimit ?? 6;
+  const totalLimit = params.totalLimit ?? 18;
+
+  const newsBySymbol = await Promise.all(
+    symbols.map((symbol) =>
+      getFinnhubCompanyNews({
+        symbol,
+        from: params.from,
+        to: params.to,
+        limit: perSymbolLimit,
+      }).catch(() => []),
+    ),
+  );
+
+  const merged = newsBySymbol.flat();
+  const dedupByUrl = new Map<string, CompanyNewsItem>();
+
+  for (const item of merged) {
+    if (!dedupByUrl.has(item.url)) {
+      dedupByUrl.set(item.url, item);
+    }
+  }
+
+  return [...dedupByUrl.values()]
+    .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())
+    .slice(0, totalLimit);
 }

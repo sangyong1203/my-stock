@@ -4,6 +4,7 @@ import type {
 } from "@/features/dashboard/types";
 import {
   MarketIndexesModule,
+  NewsModule,
   NextBuildStepsModule,
   OpenPositionsModule,
   PnlSummaryModule,
@@ -90,6 +91,17 @@ export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> 
       { id: "lg", label: "L", className: "w-[460px] min-w-[460px]" },
     ],
   },
+  news: {
+    id: "news",
+    title: "News",
+    component: NewsModule,
+    defaultWidthPreset: "md",
+    widthPresets: [
+      { id: "sm", label: "S", className: "w-[320px] min-w-[320px]" },
+      { id: "md", label: "M", className: "w-[420px] min-w-[420px]" },
+      { id: "lg", label: "L", className: "w-[540px] min-w-[540px]" },
+    ],
+  },
 };
 
 // Add a module component above, then place its id into any area below.
@@ -99,13 +111,15 @@ const dashboardModuleOrder = {
     "total-market-value",
     "pnl-summary",
   ],
+  summaryHidden: [],
   workspace: [
     "open-positions",
     "stock-price-chart",
+    "news",
     "recent-transactions",
     "next-build-steps",
   ],
-  hidden: [],
+  workspaceHidden: [],
 } as const;
 
 export const dashboardSummaryModuleIds = [...dashboardModuleOrder.summary];
@@ -113,8 +127,9 @@ export const dashboardSummaryModuleIds = [...dashboardModuleOrder.summary];
 export function createDefaultDashboardLayout(): DashboardLayoutState {
   return {
     summary: [...dashboardModuleOrder.summary],
+    summaryHidden: [...dashboardModuleOrder.summaryHidden],
     workspace: [...dashboardModuleOrder.workspace],
-    hidden: [...dashboardModuleOrder.hidden],
+    workspaceHidden: [...dashboardModuleOrder.workspaceHidden],
     widths: Object.fromEntries(
       Object.values(dashboardModuleRegistry).map((module) => [
         module.id,
@@ -141,4 +156,75 @@ export function getDashboardModuleWidthClass(
     moduleDefinition.widthPresets[0];
 
   return matched?.className ?? "w-[360px] min-w-[360px]";
+}
+
+function getPresetWidthPx(className: string) {
+  const match = className.match(/w-\[(\d+)px\]/);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCustomWidth(widthPresetId: string | undefined) {
+  if (!widthPresetId || !widthPresetId.startsWith("custom:")) {
+    return null;
+  }
+
+  const parsed = Number(widthPresetId.slice("custom:".length));
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.round(parsed);
+}
+
+export function getDashboardModuleWidthBounds(moduleId: string) {
+  const moduleDefinition = dashboardModuleRegistry[moduleId];
+  if (!moduleDefinition) {
+    return { min: 280, max: 1400 };
+  }
+
+  const presetWidths = moduleDefinition.widthPresets
+    .map((preset) => getPresetWidthPx(preset.className))
+    .filter((value): value is number => value !== null);
+
+  if (presetWidths.length === 0) {
+    return { min: 280, max: 1400 };
+  }
+
+  const minPreset = Math.min(...presetWidths);
+  const maxPreset = Math.max(...presetWidths);
+
+  return {
+    min: Math.max(220, minPreset - 120),
+    max: maxPreset + 420,
+  };
+}
+
+export function getDashboardModuleWidthPx(
+  moduleId: string,
+  widthPresetId: string | undefined,
+) {
+  const customWidth = parseCustomWidth(widthPresetId);
+  if (customWidth !== null) {
+    return customWidth;
+  }
+
+  const moduleDefinition = dashboardModuleRegistry[moduleId];
+  if (!moduleDefinition) {
+    return 360;
+  }
+
+  const matched =
+    moduleDefinition.widthPresets.find((preset) => preset.id === widthPresetId) ??
+    moduleDefinition.widthPresets.find(
+      (preset) => preset.id === moduleDefinition.defaultWidthPreset,
+    ) ??
+    moduleDefinition.widthPresets[0];
+
+  const presetWidth = matched ? getPresetWidthPx(matched.className) : null;
+  return presetWidth ?? 360;
 }

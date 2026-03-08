@@ -78,6 +78,7 @@ function buildChartOption(
   const ma5 = calculateMovingAverage(chart.points, 5);
   const ma20 = calculateMovingAverage(chart.points, 20);
   const ma60 = calculateMovingAverage(chart.points, 60);
+  const ma120 = calculateMovingAverage(chart.points, 120);
   const averageCostSeries = dates.map(() => averageCost);
   const buyMarkers = markers
     .filter((marker) => marker.side === "buy")
@@ -188,6 +189,7 @@ function buildChartOption(
           `<div>MA5: <strong>${formatChartValue(Number(ma5[pointIndex] ?? candleValue[1]))}</strong></div>`,
           `<div>MA20: <strong>${formatChartValue(Number(ma20[pointIndex] ?? candleValue[1]))}</strong></div>`,
           `<div>MA60: <strong>${formatChartValue(Number(ma60[pointIndex] ?? candleValue[1]))}</strong></div>`,
+          `<div>MA120: <strong>${formatChartValue(Number(ma120[pointIndex] ?? candleValue[1]))}</strong></div>`,
           `<div>Volume: <strong>${formatVolume(volumeValue)}</strong></div>`,
           tradeMarker
             ? `<div>${tradeMarker.seriesName}: <strong>${tradeMarker.data?.quantity ?? 0} @ ${formatChartValue(Number(tradeMarker.data?.value ?? 0))}</strong></div>`
@@ -227,8 +229,8 @@ function buildChartOption(
       },
     },
     grid: [
-      { left: 12, right: 12, top: 44, height: 236 },
-      { left: 12, right: 12, top: 300, height: 76 },
+      { left: 12, right: 12, top: "10%", height: "56%" },
+      { left: 12, right: 12, top: "70%", height: "18%" },
     ],
     xAxis: [
       {
@@ -300,7 +302,7 @@ function buildChartOption(
       {
         type: "slider",
         xAxisIndex: [0, 1],
-        bottom: 0,
+        bottom: "2%",
         height: 20,
         borderColor: "rgba(255,255,255,0.08)",
         fillerColor: "rgba(59, 130, 246, 0.14)",
@@ -410,6 +412,24 @@ function buildChartOption(
         },
         itemStyle: {
           color: "#a855f7",
+        },
+        emphasis: {
+          disabled: true,
+        },
+      },
+      {
+        name: "MA120",
+        type: "line",
+        data: ma120,
+        showSymbol: false,
+        smooth: true,
+        connectNulls: false,
+        lineStyle: {
+          width: 1.5,
+          color: "#22d3ee",
+        },
+        itemStyle: {
+          color: "#22d3ee",
         },
         emphasis: {
           disabled: true,
@@ -595,7 +615,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
   );
 
   return (
-    <Card className="module-card module-stock-price-chart h-full border-border/70">
+    <Card className="module-card module-stock-price-chart flex h-full flex-col border-border/70">
       <CardHeader className="module-card-header module-stock-price-chart-header gap-4">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -659,7 +679,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
           </div>
         ) : null}
       </CardHeader>
-      <CardContent className="module-stock-price-chart-content">
+      <CardContent className="module-stock-price-chart-content flex min-h-0 flex-1 flex-col">
         {positions.length === 0 ? (
           <div className="rounded-xl border border-border/70 p-6 text-sm text-muted-foreground">
             No positions available for charting yet.
@@ -673,19 +693,21 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
             {error}
           </div>
         ) : chart && chartOption ? (
-          <div className="module-stock-price-chart-surface rounded-2xl border border-border/70 bg-muted/20 p-4">
+          <div className="module-stock-price-chart-surface flex min-h-0 flex-1 flex-col rounded-2xl border border-border/70 bg-muted/20 p-4">
             <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
               <span>{activePosition ? `${activePosition.symbol} · ${activePosition.market}` : ""}</span>
               <span>{chart.points.at(-1)?.date ?? ""}</span>
             </div>
-            <ReactECharts
-              option={chartOption}
-              notMerge
-              lazyUpdate
-              style={{ height: 420, width: "100%" }}
-              className="module-stock-price-chart-echarts"
-              onEvents={chartEvents}
-            />
+            <div className="min-h-[280px] flex-1">
+              <ReactECharts
+                option={chartOption}
+                notMerge
+                lazyUpdate
+                style={{ height: "100%", width: "100%" }}
+                className="module-stock-price-chart-echarts"
+                onEvents={chartEvents}
+              />
+            </div>
             {selectedMarker ? (
               <div className="mt-4 rounded-xl border border-border/70 bg-background/60 p-4">
                 <div className="mb-2 flex items-center justify-between gap-3">

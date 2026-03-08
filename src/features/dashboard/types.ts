@@ -20,12 +20,17 @@ export type DashboardModuleProps = {
   model: DashboardPageModel;
 };
 
-export type DashboardArea = "summary" | "workspace" | "hidden";
+export type DashboardArea =
+  | "summary"
+  | "summaryHidden"
+  | "workspace"
+  | "workspaceHidden";
 
 export type DashboardLayoutState = {
   summary: string[];
+  summaryHidden: string[];
   workspace: string[];
-  hidden: string[];
+  workspaceHidden: string[];
   widths: Record<string, string>;
 };
 

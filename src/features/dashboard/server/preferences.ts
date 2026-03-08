@@ -25,10 +25,36 @@ function sanitizeLayout(input: unknown): DashboardLayoutState {
         )
       : {};
 
+  const legacyHidden = normalizeArray((record as { hidden?: unknown }).hidden);
+  const summary = normalizeArray(record.summary);
+  const summaryHidden = normalizeArray(record.summaryHidden);
+  const workspace = normalizeArray(record.workspace).filter(
+    (moduleId) => !summary.includes(moduleId) && !summaryHidden.includes(moduleId),
+  );
+  const workspaceHidden = normalizeArray(record.workspaceHidden);
+
+  for (const moduleId of legacyHidden) {
+    if (
+      summary.includes(moduleId) ||
+      summaryHidden.includes(moduleId) ||
+      workspace.includes(moduleId) ||
+      workspaceHidden.includes(moduleId)
+    ) {
+      continue;
+    }
+
+    if (fallback.summary.includes(moduleId)) {
+      summaryHidden.push(moduleId);
+    } else {
+      workspaceHidden.push(moduleId);
+    }
+  }
+
   return {
-    summary: normalizeArray(record.summary),
-    workspace: normalizeArray(record.workspace),
-    hidden: normalizeArray(record.hidden),
+    summary,
+    summaryHidden,
+    workspace,
+    workspaceHidden,
     widths,
   };
 }
@@ -55,9 +81,10 @@ export async function getDashboardPreferenceLayout(userId: string | null | undef
   return {
     ...fallback,
     ...layout,
-    summary: layout.summary.length > 0 ? layout.summary : fallback.summary,
-    workspace: layout.workspace.length > 0 ? layout.workspace : fallback.workspace,
-    hidden: layout.hidden,
+    summary: layout.summary,
+    summaryHidden: layout.summaryHidden,
+    workspace: layout.workspace,
+    workspaceHidden: layout.workspaceHidden,
     widths: {
       ...fallback.widths,
       ...layout.widths,
@@ -94,10 +121,10 @@ function getDashboardPreferenceLayoutSync(layout: DashboardLayoutState) {
   return {
     ...fallback,
     ...sanitized,
-    summary: sanitized.summary.length > 0 ? sanitized.summary : fallback.summary,
-    workspace:
-      sanitized.workspace.length > 0 ? sanitized.workspace : fallback.workspace,
-    hidden: sanitized.hidden,
+    summary: sanitized.summary,
+    summaryHidden: sanitized.summaryHidden,
+    workspace: sanitized.workspace,
+    workspaceHidden: sanitized.workspaceHidden,
     widths: {
       ...fallback.widths,
       ...sanitized.widths,

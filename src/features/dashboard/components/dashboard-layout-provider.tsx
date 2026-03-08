@@ -42,22 +42,40 @@ function sanitizeLayout(
   layout: DashboardLayoutState,
   defaultLayout: DashboardLayoutState,
 ) {
-  const lockedSummaryIds = new Set(defaultLayout.summary);
   const allKnown = new Set([
     ...defaultLayout.summary,
+    ...defaultLayout.summaryHidden,
     ...defaultLayout.workspace,
-    ...defaultLayout.hidden,
+    ...defaultLayout.workspaceHidden,
   ]);
 
-  const normalizeArea = (items: string[]) =>
-    items.filter((item, index) => allKnown.has(item) && items.indexOf(item) === index);
+  const normalizeArea = (items: unknown) =>
+    Array.isArray(items)
+      ? items.filter(
+          (item, index): item is string =>
+            typeof item === "string" && allKnown.has(item) && items.indexOf(item) === index,
+        )
+      : [];
+
+  const summary = normalizeArea(layout.summary);
+  const summaryHidden = normalizeArea(layout.summaryHidden).filter(
+    (item) => !summary.includes(item),
+  );
+  const workspace = normalizeArea(layout.workspace).filter(
+    (item) => !summary.includes(item) && !summaryHidden.includes(item),
+  );
+  const workspaceHidden = normalizeArea(layout.workspaceHidden).filter(
+    (item) =>
+      !summary.includes(item) &&
+      !summaryHidden.includes(item) &&
+      !workspace.includes(item),
+  );
 
   const next: DashboardLayoutState = {
-    summary: [...defaultLayout.summary],
-    workspace: normalizeArea(layout.workspace).filter(
-      (item) => !lockedSummaryIds.has(item),
-    ),
-    hidden: normalizeArea(layout.hidden).filter((item) => !lockedSummaryIds.has(item)),
+    summary,
+    summaryHidden,
+    workspace,
+    workspaceHidden,
     widths:
       layout.widths && typeof layout.widths === "object" ? { ...layout.widths } : {},
   };
@@ -65,10 +83,15 @@ function sanitizeLayout(
   for (const moduleId of allKnown) {
     if (
       !next.summary.includes(moduleId) &&
+      !next.summaryHidden.includes(moduleId) &&
       !next.workspace.includes(moduleId) &&
-      !next.hidden.includes(moduleId)
+      !next.workspaceHidden.includes(moduleId)
     ) {
-      next.hidden.push(moduleId);
+      if (defaultLayout.summary.includes(moduleId)) {
+        next.summaryHidden.push(moduleId);
+      } else {
+        next.workspaceHidden.push(moduleId);
+      }
     }
   }
 
@@ -78,8 +101,9 @@ function sanitizeLayout(
 function removeModule(layout: DashboardLayoutState, moduleId: string): DashboardLayoutState {
   return {
     summary: layout.summary.filter((item) => item !== moduleId),
+    summaryHidden: layout.summaryHidden.filter((item) => item !== moduleId),
     workspace: layout.workspace.filter((item) => item !== moduleId),
-    hidden: layout.hidden.filter((item) => item !== moduleId),
+    workspaceHidden: layout.workspaceHidden.filter((item) => item !== moduleId),
     widths: { ...layout.widths },
   };
 }
@@ -199,12 +223,28 @@ export function DashboardLayoutProvider({
       },
       setAreaModules(area, moduleIds) {
         setLayout((current) => {
-          const currentAreaSet = new Set(current[area]);
-          const ordered = moduleIds.filter((moduleId) => currentAreaSet.has(moduleId));
-          const remaining = current[area].filter((moduleId) => !ordered.includes(moduleId));
+          const ordered = Array.from(new Set(moduleIds));
+          const areaOrder: DashboardArea[] = [
+            "summary",
+            "summaryHidden",
+            "workspace",
+            "workspaceHidden",
+          ];
+          const next = {
+            summary: [...current.summary],
+            summaryHidden: [...current.summaryHidden],
+            workspace: [...current.workspace],
+            workspaceHidden: [...current.workspaceHidden],
+            widths: { ...current.widths },
+          };
+
+          for (const areaKey of areaOrder) {
+            next[areaKey] = next[areaKey].filter((moduleId) => !ordered.includes(moduleId));
+          }
+
           return {
-            ...current,
-            [area]: [...ordered, ...remaining],
+            ...next,
+            [area]: ordered,
           };
         });
       },

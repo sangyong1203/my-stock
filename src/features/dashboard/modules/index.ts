@@ -1,4 +1,5 @@
 export { MarketIndexesModule } from "@/features/dashboard/modules/market-indexes-module";
+export { NewsModule } from "@/features/dashboard/modules/news-module";
 export { NextBuildStepsModule } from "@/features/dashboard/modules/next-build-steps-module";
 export { OpenPositionsModule } from "@/features/dashboard/modules/open-positions-module";
 export { PnlSummaryModule } from "@/features/dashboard/modules/pnl-summary-module";

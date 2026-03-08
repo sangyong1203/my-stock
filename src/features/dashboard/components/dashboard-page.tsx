@@ -3,6 +3,7 @@ import { DashboardLayoutProvider } from "@/features/dashboard/components/dashboa
 import { DashboardSelectionProvider } from "@/features/dashboard/components/dashboard-selection-provider";
 import { DashboardWorkspace } from "@/features/dashboard/components/dashboard-workspace";
 import type { DashboardPageModel } from "@/features/dashboard/types";
+import { MarketPriceSyncProvider } from "@/features/market-data/components/market-price-sync-provider";
 
 type Props = {
   model: DashboardPageModel;
@@ -18,16 +19,18 @@ export function DashboardPage({ model }: Props) {
 
   return (
     <main className="flex h-screen flex-col bg-background text-foreground">
-      <div className="flex flex-1 w-full flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex w-full flex-1 flex-col gap-6 overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
         <DashboardLayoutProvider
           key={model.syncStorageScope}
           storageScope={model.syncStorageScope}
           defaultLayout={model.initialLayout}
         >
-          <DashboardSelectionProvider initialSecurity={initialSecurity}>
-            <DashboardHeader model={model} />
-            <DashboardWorkspace model={model} />
-          </DashboardSelectionProvider>
+          <MarketPriceSyncProvider storageScope={model.syncStorageScope}>
+            <DashboardSelectionProvider initialSecurity={initialSecurity}>
+              <DashboardHeader model={model} />
+              <DashboardWorkspace model={model} />
+            </DashboardSelectionProvider>
+          </MarketPriceSyncProvider>
         </DashboardLayoutProvider>
       </div>
     </main>

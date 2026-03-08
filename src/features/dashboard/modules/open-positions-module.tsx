@@ -18,14 +18,16 @@ import {
 import { useDashboardSelection } from "@/features/dashboard/components/dashboard-selection-provider";
 import { formatCurrency } from "@/features/dashboard/lib/format";
 import type { DashboardModuleProps } from "@/features/dashboard/types";
+import { SyncMarketPricesButton } from "@/features/market-data/components/sync-market-prices-button";
 import { CreateTransactionDialog } from "@/features/transactions/components/create-transaction-dialog";
 
 export function OpenPositionsModule({ model }: DashboardModuleProps) {
   const positions = model.dashboard.positions;
   const { selectedSecurity, setSelectedSecurity } = useDashboardSelection();
+  const { isAuthenticated } = model;
 
   return (
-    <Card className="module-card module-open-positions h-full min-w-0 border-border/70">
+    <Card className="module-card module-open-positions flex h-full min-w-0 flex-col border-border/70">
       <CardHeader className="module-card-header module-open-positions-header">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -34,35 +36,38 @@ export function OpenPositionsModule({ model }: DashboardModuleProps) {
               Unrealized P/L uses `currentPrice - averageCost` on current quantity.
             </CardDescription>
           </div>
-          <CreateTransactionDialog
-            triggerClassName="bg-white/10 text-white hover:bg-white/20"
-          />
+          <div className="flex items-center gap-2">
+            {isAuthenticated ? (
+              <SyncMarketPricesButton className="border-white/20 bg-white/5 text-white hover:bg-white/10" />
+            ) : null}
+            <CreateTransactionDialog
+              triggerClassName="bg-white/10 text-white hover:bg-white/20"
+            />
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="module-open-positions-content">
-        <div className="module-open-positions-table-wrap rounded-xl border border-border/70">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Symbol</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Avg Cost</TableHead>
-                <TableHead className="text-right">Current</TableHead>
-                <TableHead className="text-right">Value</TableHead>
-                <TableHead className="text-right">Unrealized P/L</TableHead>
-                <TableHead className="text-right">P/L %</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {positions.length === 0 ? (
+      <CardContent className="module-open-positions-content flex flex-1 min-h-0">
+        <div className="module-open-positions-table-wrap flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70">
+          {positions.length === 0 ? (
+            <div className="flex h-full min-h-[220px] items-center justify-center px-4 text-center text-muted-foreground">
+              No positions yet. Add your first trade.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    No positions yet. Add your first trade.
-                  </TableCell>
+                  <TableHead>Symbol</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Avg Cost</TableHead>
+                  <TableHead className="text-right">Current</TableHead>
+                  <TableHead className="text-right">Value</TableHead>
+                  <TableHead className="text-right">Unrealized P/L</TableHead>
+                  <TableHead className="text-right">P/L %</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                positions.map((row) => {
+              </TableHeader>
+              <TableBody>
+                {positions.map((row) => {
                   const pnlRate =
                     row.avgCost === 0
                       ? 0
@@ -90,7 +95,7 @@ export function OpenPositionsModule({ model }: DashboardModuleProps) {
                       <TableCell>
                         <div className="font-medium">{row.symbol}</div>
                         <div className="text-xs text-muted-foreground">
-                          {row.name} · {row.market}
+                          {row.name} ? {row.market}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">{row.quantity}</TableCell>
@@ -148,10 +153,10 @@ export function OpenPositionsModule({ model }: DashboardModuleProps) {
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
+                })}
+              </TableBody>
+            </Table>
+          )}
         </div>
       </CardContent>
     </Card>
