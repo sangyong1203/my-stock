@@ -477,6 +477,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
   const [selectedRange, setSelectedRange] = useState<ChartRange>("3m");
   const [chart, setChart] = useState<StockChartData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
 
@@ -563,10 +564,10 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
 
         if (!cancelled) {
           setChart(payload.data);
+          setHasLoadedOnce(true);
         }
       } catch (fetchError) {
         if (!cancelled) {
-          setChart(null);
           setError(
             fetchError instanceof Error
               ? fetchError.message
@@ -684,16 +685,16 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
           <div className="rounded-xl border border-border/70 p-6 text-sm text-muted-foreground">
             No positions available for charting yet.
           </div>
-        ) : loading ? (
+        ) : loading && !chart ? (
           <div className="rounded-xl border border-border/70 p-6 text-sm text-muted-foreground">
             Loading chart data...
           </div>
-        ) : error ? (
+        ) : error && !chart ? (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-6 text-sm text-rose-300">
             {error}
           </div>
         ) : chart && chartOption ? (
-          <div className="module-stock-price-chart-surface flex min-h-0 flex-1 flex-col rounded-2xl border border-border/70 bg-muted/20 p-4">
+          <div className="module-stock-price-chart-surface relative flex min-h-0 flex-1 flex-col rounded-2xl border border-border/70 bg-muted/20 p-4">
             <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
               <span>{activePosition ? `${activePosition.symbol} · ${activePosition.market}` : ""}</span>
               <span>{chart.points.at(-1)?.date ?? ""}</span>
@@ -701,13 +702,26 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
             <div className="min-h-[280px] flex-1">
               <ReactECharts
                 option={chartOption}
-                notMerge
+                notMerge={false}
+                replaceMerge={["series"]}
                 lazyUpdate
                 style={{ height: "100%", width: "100%" }}
                 className="module-stock-price-chart-echarts"
                 onEvents={chartEvents}
               />
             </div>
+            {loading && hasLoadedOnce ? (
+              <div className="absolute inset-4 flex items-center justify-center rounded-2xl bg-background/35 backdrop-blur-[1px]">
+                <div className="rounded-lg border border-border/70 bg-background/80 px-3 py-2 text-sm text-muted-foreground">
+                  Refreshing chart...
+                </div>
+              </div>
+            ) : null}
+            {error ? (
+              <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
+                {error}
+              </div>
+            ) : null}
             {selectedMarker ? (
               <div className="mt-4 rounded-xl border border-border/70 bg-background/60 p-4">
                 <div className="mb-2 flex items-center justify-between gap-3">

@@ -6,3 +6,4 @@ export { PnlSummaryModule } from "@/features/dashboard/modules/pnl-summary-modul
 export { RecentTransactionsModule } from "@/features/dashboard/modules/recent-transactions-module";
 export { StockPriceChartModule } from "@/features/dashboard/modules/stock-price-chart-module";
 export { TotalMarketValueModule } from "@/features/dashboard/modules/total-market-value-module";
+export { WatchlistModule } from "@/features/dashboard/modules/watchlist-module";

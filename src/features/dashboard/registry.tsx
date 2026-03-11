@@ -11,6 +11,7 @@ import {
   RecentTransactionsModule,
   StockPriceChartModule,
   TotalMarketValueModule,
+  WatchlistModule,
 } from "@/features/dashboard/modules";
 
 export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> = {
@@ -102,6 +103,17 @@ export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> 
       { id: "lg", label: "L", className: "w-[540px] min-w-[540px]" },
     ],
   },
+  watchlist: {
+    id: "watchlist",
+    title: "Watch List",
+    component: WatchlistModule,
+    defaultWidthPreset: "md",
+    widthPresets: [
+      { id: "sm", label: "S", className: "w-[320px] min-w-[320px]" },
+      { id: "md", label: "M", className: "w-[420px] min-w-[420px]" },
+      { id: "lg", label: "L", className: "w-[520px] min-w-[520px]" },
+    ],
+  },
 };
 
 // Add a module component above, then place its id into any area below.
@@ -116,6 +128,7 @@ const dashboardModuleOrder = {
     "open-positions",
     "stock-price-chart",
     "news",
+    "watchlist",
     "recent-transactions",
     "next-build-steps",
   ],

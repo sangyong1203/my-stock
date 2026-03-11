@@ -208,6 +208,30 @@ export const securityNotes = pgTable("security_note", {
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
 
+export const watchlistItems = pgTable(
+  "watchlist_item",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    portfolioId: text("portfolioId")
+      .notNull()
+      .references(() => portfolios.id, { onDelete: "cascade" }),
+    securityId: text("securityId")
+      .notNull()
+      .references(() => securities.id, { onDelete: "cascade" }),
+    note: text("note"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("watchlist_item_portfolio_security_idx").on(
+      table.portfolioId,
+      table.securityId,
+    ),
+  ],
+);
+
 export const transactionNotes = pgTable("transaction_note", {
   id: text("id")
     .primaryKey()

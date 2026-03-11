@@ -1,6 +1,13 @@
 ﻿import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { portfolios, positions, priceSnapshots, securities, transactions } from "@/db/schema";
+import {
+  portfolios,
+  positions,
+  priceSnapshots,
+  securities,
+  transactions,
+  watchlistItems,
+} from "@/db/schema";
 import { getMarketIndexSnapshots } from "@/features/market-data/server/market-index-service";
 import {
   EMPTY_POSITION,
@@ -52,6 +59,18 @@ export type DashboardMarketIndexRow = {
   asOf: Date | null;
 };
 
+export type DashboardWatchlistRow = {
+  id: string;
+  symbol: string;
+  name: string;
+  market: string;
+  currency: "KRW" | "USD";
+  currentPrice: number | null;
+  note: string | null;
+  createdAt: Date;
+  isHeld: boolean;
+};
+
 export type DashboardData = {
   source: "database" | "demo";
   warning?: string;
@@ -59,6 +78,7 @@ export type DashboardData = {
   recentTransactions: DashboardTransactionRow[];
   chartTransactions: DashboardChartTransactionRow[];
   marketIndexes: DashboardMarketIndexRow[];
+  watchlist: DashboardWatchlistRow[];
   realizedPnl: number;
   realizedReturnRate: number;
   userId: string | null;
@@ -119,6 +139,30 @@ const FALLBACK_DATA: DashboardData = {
       asOf: null,
     },
   ],
+  watchlist: [
+    {
+      id: "demo-watch-msft",
+      symbol: "MSFT",
+      name: "Microsoft",
+      market: "NASDAQ",
+      currency: "USD",
+      currentPrice: 418.35,
+      note: "Cloud and AI watch candidate",
+      createdAt: new Date("2026-03-01T00:00:00.000Z"),
+      isHeld: false,
+    },
+    {
+      id: "demo-watch-amzn",
+      symbol: "AMZN",
+      name: "Amazon",
+      market: "NASDAQ",
+      currency: "USD",
+      currentPrice: 203.11,
+      note: "Retail + AWS pullback zone",
+      createdAt: new Date("2026-03-02T00:00:00.000Z"),
+      isHeld: false,
+    },
+  ],
   realizedPnl: 0,
   realizedReturnRate: 0,
   userId: null,
@@ -132,6 +176,10 @@ function buildMissingPortfolioResponse(
   return {
     ...FALLBACK_DATA,
     source,
+    positions: [],
+    recentTransactions: [],
+    chartTransactions: [],
+    watchlist: [],
     userId: effectiveUserId,
     warning: userId
       ? "No portfolio found for this account yet. Add your first transaction."
@@ -215,6 +263,24 @@ async function getRecentTransactions(portfolioId: string) {
     .where(eq(transactions.portfolioId, portfolioId))
     .orderBy(desc(transactions.tradeDate), desc(transactions.createdAt))
     .limit(8);
+}
+
+async function getWatchlistItems(portfolioId: string) {
+  return db
+    .select({
+      id: watchlistItems.id,
+      securityId: watchlistItems.securityId,
+      symbol: securities.symbol,
+      name: securities.name,
+      market: securities.market,
+      currency: securities.currency,
+      note: watchlistItems.note,
+      createdAt: watchlistItems.createdAt,
+    })
+    .from(watchlistItems)
+    .innerJoin(securities, eq(watchlistItems.securityId, securities.id))
+    .where(eq(watchlistItems.portfolioId, portfolioId))
+    .orderBy(desc(watchlistItems.createdAt));
 }
 
 async function getAllTransactionsForRealizedPnl(portfolioId: string) {
@@ -333,6 +399,24 @@ function buildDashboardChartTransactions(
   }));
 }
 
+function buildDashboardWatchlist(
+  watchlistRows: Awaited<ReturnType<typeof getWatchlistItems>>,
+  latestPriceBySecurity: Map<string, number>,
+  heldSecurityIds: Set<string>,
+): DashboardWatchlistRow[] {
+  return watchlistRows.map((row) => ({
+    id: row.id,
+    symbol: row.symbol,
+    name: row.name,
+    market: row.market,
+    currency: row.currency,
+    currentPrice: latestPriceBySecurity.get(row.securityId) ?? null,
+    note: row.note,
+    createdAt: row.createdAt,
+    isHeld: heldSecurityIds.has(row.securityId),
+  }));
+}
+
 function getDashboardWarning(
   userId: string | null | undefined,
   dashboardPositions: DashboardPositionRow[],
@@ -371,11 +455,22 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
     }
 
     const filteredPositions = await getPortfolioPositions(portfolio.id);
-    const securityIds = filteredPositions.map((row) => row.securityId);
+    const watchlistRows = await getWatchlistItems(portfolio.id);
+    const securityIds = Array.from(
+      new Set([
+        ...filteredPositions.map((row) => row.securityId),
+        ...watchlistRows.map((row) => row.securityId),
+      ]),
+    );
     const latestPriceBySecurity = await getLatestPricesBySecurity(securityIds);
     const dashboardPositions = buildDashboardPositions(
       filteredPositions,
       latestPriceBySecurity,
+    );
+    const dashboardWatchlist = buildDashboardWatchlist(
+      watchlistRows,
+      latestPriceBySecurity,
+      new Set(filteredPositions.map((row) => row.securityId)),
     );
     const recentTransactionRows = await getRecentTransactions(portfolio.id);
     const allTransactionRows = await getAllTransactionsForRealizedPnl(portfolio.id);
@@ -394,6 +489,7 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
       recentTransactions,
       chartTransactions,
       marketIndexes,
+      watchlist: dashboardWatchlist,
       realizedPnl,
       realizedReturnRate,
       userId: effectiveUserId,
