@@ -105,23 +105,32 @@ export function DashboardHeader({ model }: Props) {
       <header className="dashboard-header relative overflow-visible rounded-3xl border border-border/70 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 p-4 text-zinc-50 shadow-sm">
         <div className="dashboard-header-background absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.15),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(34,197,94,0.25),transparent_35%),radial-gradient(circle_at_80%_80%,rgba(59,130,246,0.2),transparent_40%)]" />
         <div className="dashboard-header-content relative flex flex-col gap-3">
-          <div className="dashboard-header-top flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="dashboard-header-copy space-y-3">
-              <div className="dashboard-header-title-group">
+          <div className="dashboard-header-top flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
+            <div className="dashboard-header-copy min-w-0 flex-1 space-y-3">
+              <div className="dashboard-header-title-group flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                   Investment Dashboard
                 </h1>
+                {dashboard.warning ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="dashboard-header-warning inline-flex h-9 max-w-[30%] min-w-0 items-center overflow-hidden truncate whitespace-nowrap rounded-md border border-amber-300/20 bg-amber-300/10 px-3 text-xs text-amber-100">
+                          <span className="block min-w-0 truncate">
+                            {dashboard.warning}
+                          </span>
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent>{dashboard.warning}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : null}
               </div>
-              {dashboard.warning ? (
-                <p className="dashboard-header-warning max-w-2xl rounded-md border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">
-                  {dashboard.warning}
-                </p>
-              ) : null}
             </div>
             {isAuthenticated ? (
               <>
                 <AutoSyncMarketPrices enabled={isAuthenticated} />
-                <div className="dashboard-header-controls flex flex-wrap items-center justify-end gap-2">
+                <div className="dashboard-header-controls flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -146,7 +155,7 @@ export function DashboardHeader({ model }: Props) {
                 </div>
               </>
             ) : (
-              <div className="dashboard-header-controls flex items-center gap-2">
+              <div className="dashboard-header-controls flex items-center gap-2 sm:ml-auto">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>

@@ -31,6 +31,9 @@ type FinnhubCompanyNewsResponse = {
 export type MarketQuote = {
   symbol: string;
   price: number;
+  previousClose: number | null;
+  changeAmount: number | null;
+  changePercent: number | null;
   asOf: Date;
   source: "finnhub";
 };
@@ -123,6 +126,11 @@ export async function getFinnhubQuote(symbol: string): Promise<MarketQuote> {
   return {
     symbol,
     price: data.c,
+    previousClose: Number.isFinite(data.pc) && data.pc > 0 ? data.pc : null,
+    changeAmount:
+      Number.isFinite(data.pc) && data.pc > 0 ? data.c - data.pc : null,
+    changePercent:
+      Number.isFinite(data.pc) && data.pc > 0 ? ((data.c - data.pc) / data.pc) * 100 : null,
     asOf: new Date(timestampMs),
     source: "finnhub",
   };

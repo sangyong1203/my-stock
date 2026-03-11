@@ -27,3 +27,10 @@ export function formatDateTime(value: Date) {
     hour12: false,
   }).format(value);
 }
+
+export function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: 2,
+  }).format(value);
+}

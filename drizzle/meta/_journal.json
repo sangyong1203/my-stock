@@ -15,6 +15,13 @@
       "when": 1772339022608,
       "tag": "0001_curly_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773238519050,
+      "tag": "0002_unknown_justin_hammer",
+      "breakpoints": true
     }
   ]
 }

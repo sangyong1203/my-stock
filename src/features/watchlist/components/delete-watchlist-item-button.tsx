@@ -1,6 +1,6 @@
 "use client";
 
-import { StarOff } from "lucide-react";
+import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -21,7 +21,7 @@ export function DeleteWatchlistItemButton({ watchlistItemId, symbol }: Props) {
       type="button"
       size="icon"
       variant="ghost"
-      className="size-7 text-muted-foreground hover:text-rose-500"
+      className="absolute right-[-12px] top-[22px] z-10 size-5 bg-[#e5484d] text-white opacity-0 transition-opacity hover:bg-[#e5484d] hover:text-white focus-visible:opacity-100 group-hover:opacity-100"
       disabled={isPending}
       onClick={async () => {
         const confirmed = window.confirm(`Remove ${symbol} from watch list?`);
@@ -52,7 +52,7 @@ export function DeleteWatchlistItemButton({ watchlistItemId, symbol }: Props) {
       aria-label={`Remove ${symbol} from watch list`}
       title="Remove from watch list"
     >
-      <StarOff className={`size-4 ${isPending ? "animate-pulse" : ""}`} />
+      <X className={`size-3.5 ${isPending ? "animate-pulse" : ""}`} />
     </Button>
   );
 }

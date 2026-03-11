@@ -1,6 +1,12 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { portfolios, positions, priceSnapshots, securities } from "@/db/schema";
+import {
+  portfolios,
+  positions,
+  priceSnapshots,
+  securities,
+  watchlistItems,
+} from "@/db/schema";
 import { getFinnhubQuote } from "@/features/market-data/server/finnhub";
 
 const FINNHUB_SUPPORTED_MARKETS = new Set(["NASDAQ", "NYSE", "ETF"]);
@@ -30,36 +36,52 @@ function toDateOnly(value: Date) {
   return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
 }
 
-function toUniqueActiveTargets(
+function addUniqueTargets(
+  uniqueTargets: Map<string, SyncTarget>,
   rows: Array<{
     securityId: string;
-    quantity: unknown;
     symbol: string;
     market: string;
   }>,
 ) {
-  const uniqueActive = new Map<string, SyncTarget>();
-
   for (const row of rows) {
-    if (Number(row.quantity) <= 0) {
-      continue;
-    }
-
     const key = `${row.securityId}:${row.symbol}:${row.market}`;
-    if (!uniqueActive.has(key)) {
-      uniqueActive.set(key, {
+    if (!uniqueTargets.has(key)) {
+      uniqueTargets.set(key, {
         securityId: row.securityId,
         symbol: row.symbol,
         market: row.market,
       });
     }
   }
+}
 
-  return [...uniqueActive.values()];
+function toUniqueTrackedTargets(params: {
+  positionRows: Array<{
+    securityId: string;
+    quantity: unknown;
+    symbol: string;
+    market: string;
+  }>;
+  watchlistRows: Array<{
+    securityId: string;
+    symbol: string;
+    market: string;
+  }>;
+}) {
+  const uniqueTargets = new Map<string, SyncTarget>();
+
+  addUniqueTargets(
+    uniqueTargets,
+    params.positionRows.filter((row) => Number(row.quantity) > 0),
+  );
+  addUniqueTargets(uniqueTargets, params.watchlistRows);
+
+  return [...uniqueTargets.values()];
 }
 
 export async function getActiveTargetsForPortfolio(portfolioId: string) {
-  const rows = await db
+  const positionRows = await db
     .select({
       securityId: positions.securityId,
       quantity: positions.quantity,
@@ -70,11 +92,21 @@ export async function getActiveTargetsForPortfolio(portfolioId: string) {
     .innerJoin(securities, eq(positions.securityId, securities.id))
     .where(eq(positions.portfolioId, portfolioId));
 
-  return toUniqueActiveTargets(rows);
+  const watchlistRows = await db
+    .select({
+      securityId: watchlistItems.securityId,
+      symbol: securities.symbol,
+      market: securities.market,
+    })
+    .from(watchlistItems)
+    .innerJoin(securities, eq(watchlistItems.securityId, securities.id))
+    .where(eq(watchlistItems.portfolioId, portfolioId));
+
+  return toUniqueTrackedTargets({ positionRows, watchlistRows });
 }
 
 export async function getActiveTargetsForAllPortfolios() {
-  const rows = await db
+  const positionRows = await db
     .select({
       securityId: positions.securityId,
       quantity: positions.quantity,
@@ -84,7 +116,16 @@ export async function getActiveTargetsForAllPortfolios() {
     .from(positions)
     .innerJoin(securities, eq(positions.securityId, securities.id));
 
-  return toUniqueActiveTargets(rows);
+  const watchlistRows = await db
+    .select({
+      securityId: watchlistItems.securityId,
+      symbol: securities.symbol,
+      market: securities.market,
+    })
+    .from(watchlistItems)
+    .innerJoin(securities, eq(watchlistItems.securityId, securities.id));
+
+  return toUniqueTrackedTargets({ positionRows, watchlistRows });
 }
 
 export async function getPortfolioIdForUser(userId: string) {
@@ -108,7 +149,7 @@ export async function syncPricesForTargets(
   if (targets.length === 0) {
     return {
       ok: true,
-      message: "No active positions found.",
+      message: "No tracked securities found.",
       updated: 0,
       skipped: 0,
       errors: [],

@@ -90,6 +90,18 @@ async function fetchStooqHistory(symbol: string, market: string) {
   return parseHistoryCsv(await response.text());
 }
 
+export async function getLatestStockChartPoint(params: {
+  symbol: string;
+  market: string;
+}) {
+  const history = await fetchStooqHistory(
+    params.symbol.trim().toUpperCase(),
+    params.market.trim().toUpperCase(),
+  );
+
+  return history.at(-1) ?? null;
+}
+
 export async function getStockChartData(params: {
   symbol: string;
   market: string;

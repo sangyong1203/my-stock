@@ -1,5 +1,6 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -16,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDashboardSelection } from "@/features/dashboard/components/dashboard-selection-provider";
-import { formatCurrency } from "@/features/dashboard/lib/format";
+import { formatCompactNumber, formatCurrency } from "@/features/dashboard/lib/format";
 import type { DashboardModuleProps } from "@/features/dashboard/types";
 import { SyncMarketPricesButton } from "@/features/market-data/components/sync-market-prices-button";
 import { CreateTransactionDialog } from "@/features/transactions/components/create-transaction-dialog";
@@ -47,21 +48,24 @@ export function OpenPositionsModule({ model }: DashboardModuleProps) {
         </div>
       </CardHeader>
       <CardContent className="module-open-positions-content flex flex-1 min-h-0">
-        <div className="module-open-positions-table-wrap flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70">
+        <div className="module-open-positions-table-wrap flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 [&_[data-slot=table-container]]:[--app-scrollbar-thumb:transparent]">
           {positions.length === 0 ? (
             <div className="flex h-full min-h-[220px] items-center justify-center px-4 text-center text-muted-foreground">
               No positions yet. Add your first trade.
             </div>
           ) : (
-            <Table>
+            <Table className="min-w-[1180px] text-xs">
               <TableHeader>
                 <TableRow>
                   <TableHead>Symbol</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Avg Cost</TableHead>
-                  <TableHead className="text-right">Current</TableHead>
+                  <TableHead className="text-right">Avg</TableHead>
+                  <TableHead className="text-right">Cur</TableHead>
+                  <TableHead className="text-right">Chg</TableHead>
+                  <TableHead className="text-right">Chg %</TableHead>
+                  <TableHead className="text-right">Vol</TableHead>
                   <TableHead className="text-right">Value</TableHead>
-                  <TableHead className="text-right">Unrealized P/L</TableHead>
+                  <TableHead className="text-right">U P/L</TableHead>
                   <TableHead className="text-right">P/L %</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -93,9 +97,17 @@ export function OpenPositionsModule({ model }: DashboardModuleProps) {
                       }
                     >
                       <TableCell>
-                        <div className="font-medium">{row.symbol}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium">{row.symbol}</div>
+                          <Badge
+                            variant="outline"
+                            className="h-5 px-1.5 text-[10px] font-normal text-muted-foreground"
+                          >
+                            {row.market}
+                          </Badge>
+                        </div>
                         <div className="text-xs text-muted-foreground">
-                          {row.name} ? {row.market}
+                          {row.name}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">{row.quantity}</TableCell>
@@ -104,6 +116,37 @@ export function OpenPositionsModule({ model }: DashboardModuleProps) {
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(row.currentPrice, row.currency)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right font-medium ${
+                          row.changeAmount === null
+                            ? "text-muted-foreground"
+                            : row.changeAmount >= 0
+                              ? "text-emerald-500"
+                              : "text-rose-500"
+                        }`}
+                      >
+                        {row.changeAmount === null
+                          ? "-"
+                          : `${row.changeAmount >= 0 ? "+" : ""}${formatCurrency(row.changeAmount, row.currency)}`}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right font-medium ${
+                          row.changePercent === null
+                            ? "text-muted-foreground"
+                            : row.changePercent >= 0
+                              ? "text-emerald-500"
+                              : "text-rose-500"
+                        }`}
+                      >
+                        {row.changePercent === null
+                          ? "-"
+                          : `${row.changePercent >= 0 ? "+" : ""}${row.changePercent.toFixed(2)}%`}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {row.latestVolume === null
+                          ? "-"
+                          : formatCompactNumber(row.latestVolume)}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatCurrency(positionValue, row.currency)}
@@ -129,7 +172,7 @@ export function OpenPositionsModule({ model }: DashboardModuleProps) {
                         >
                           <CreateTransactionDialog
                             triggerLabel="Buy"
-                            triggerClassName="h-8 px-3 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
+                            triggerClassName="h-7 px-2.5 text-xs bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
                             initialValues={{
                               symbol: row.symbol,
                               securityName: row.name,
@@ -140,7 +183,7 @@ export function OpenPositionsModule({ model }: DashboardModuleProps) {
                           />
                           <CreateTransactionDialog
                             triggerLabel="Sell"
-                            triggerClassName="h-8 px-3 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
+                            triggerClassName="h-7 px-2.5 text-xs bg-rose-500/10 text-rose-500 hover:bg-rose-500/20"
                             initialValues={{
                               symbol: row.symbol,
                               securityName: row.name,

@@ -14,14 +14,20 @@ import {
   type PositionState,
   applyAverageCostTradeDetailed,
 } from "@/features/transactions/server/average-cost";
+import { getFinnhubQuote } from "@/features/market-data/server/finnhub";
+import { getLatestStockChartPoint } from "@/features/market-data/server/stock-chart-service";
 
 export type DashboardPositionRow = {
+  securityId: string;
   symbol: string;
   name: string;
   market: string;
   quantity: number;
   avgCost: number;
   currentPrice: number;
+  changeAmount: number | null;
+  changePercent: number | null;
+  latestVolume: number | null;
   currency: "KRW" | "USD";
 };
 
@@ -66,6 +72,9 @@ export type DashboardWatchlistRow = {
   market: string;
   currency: "KRW" | "USD";
   currentPrice: number | null;
+  changeAmount: number | null;
+  changePercent: number | null;
+  latestVolume: number | null;
   note: string | null;
   createdAt: Date;
   isHeld: boolean;
@@ -90,30 +99,42 @@ const FALLBACK_DATA: DashboardData = {
   warning: "Database not configured yet. Showing demo data.",
   positions: [
     {
+      securityId: "demo-security-aapl",
       symbol: "AAPL",
       name: "Apple",
       market: "NASDAQ",
       quantity: 12,
       avgCost: 188.42,
       currentPrice: 201.5,
+      changeAmount: 2.41,
+      changePercent: 1.21,
+      latestVolume: 52300000,
       currency: "USD",
     },
     {
+      securityId: "demo-security-nvda",
       symbol: "NVDA",
       name: "NVIDIA",
       market: "NASDAQ",
       quantity: 5,
       avgCost: 742.1,
       currentPrice: 711.4,
+      changeAmount: -8.23,
+      changePercent: -1.14,
+      latestVolume: 41200000,
       currency: "USD",
     },
     {
+      securityId: "demo-security-tsla",
       symbol: "TSLA",
       name: "Tesla",
       market: "NASDAQ",
       quantity: 8,
       avgCost: 176.25,
       currentPrice: 189.2,
+      changeAmount: 3.65,
+      changePercent: 1.97,
+      latestVolume: 67800000,
       currency: "USD",
     },
   ],
@@ -147,6 +168,9 @@ const FALLBACK_DATA: DashboardData = {
       market: "NASDAQ",
       currency: "USD",
       currentPrice: 418.35,
+      changeAmount: 7.56,
+      changePercent: 1.84,
+      latestVolume: 18560000,
       note: "Cloud and AI watch candidate",
       createdAt: new Date("2026-03-01T00:00:00.000Z"),
       isHeld: false,
@@ -158,6 +182,9 @@ const FALLBACK_DATA: DashboardData = {
       market: "NASDAQ",
       currency: "USD",
       currentPrice: 203.11,
+      changeAmount: -1.47,
+      changePercent: -0.72,
+      latestVolume: 8240000,
       note: "Retail + AWS pullback zone",
       createdAt: new Date("2026-03-02T00:00:00.000Z"),
       isHeld: false,
@@ -227,19 +254,161 @@ async function getLatestPricesBySecurity(securityIds: string[]) {
   return latestPriceBySecurity;
 }
 
+async function getLatestPriceSummaryBySecurity(securityIds: string[]) {
+  if (securityIds.length === 0) {
+    return new Map<
+      string,
+      {
+        currentPrice: number;
+        changeAmount: number | null;
+        changePercent: number | null;
+        latestVolume: number | null;
+      }
+    >();
+  }
+
+  const snapshotRows = await db
+    .select({
+      securityId: priceSnapshots.securityId,
+      closePrice: priceSnapshots.closePrice,
+      tradingDay: priceSnapshots.tradingDay,
+    })
+    .from(priceSnapshots)
+    .where(inArray(priceSnapshots.securityId, securityIds))
+    .orderBy(desc(priceSnapshots.tradingDay));
+
+  const summaryBySecurity = new Map<
+    string,
+    { currentPrice: number; previousPrice: number | null; changePercent: number | null }
+  >();
+
+  for (const row of snapshotRows) {
+    const price = Number(row.closePrice);
+    const existing = summaryBySecurity.get(row.securityId);
+
+    if (!existing) {
+      summaryBySecurity.set(row.securityId, {
+        currentPrice: price,
+        previousPrice: null,
+        changePercent: null,
+      });
+      continue;
+    }
+
+    if (existing.previousPrice === null) {
+      existing.previousPrice = price;
+      existing.changePercent =
+        price > 0 ? ((existing.currentPrice - price) / price) * 100 : null;
+    }
+  }
+
+  return new Map(
+    [...summaryBySecurity.entries()].map(([securityId, summary]) => [
+      securityId,
+      {
+        currentPrice: summary.currentPrice,
+        changeAmount:
+          summary.previousPrice !== null
+            ? summary.currentPrice - summary.previousPrice
+            : null,
+        changePercent: summary.changePercent,
+        latestVolume: null,
+      },
+    ]),
+  );
+}
+
+const FINNHUB_SUPPORTED_MARKETS = new Set(["NASDAQ", "NYSE", "ETF"]);
+
+async function getLiveTrackedPriceSummary(
+  trackedRows: Array<{
+    securityId: string;
+    symbol: string;
+    market: string;
+  }>,
+) {
+  const uniqueRows = Array.from(
+    new Map(
+      trackedRows
+        .filter((row) => FINNHUB_SUPPORTED_MARKETS.has(row.market))
+        .map((row) => [row.securityId, row]),
+    ).values(),
+  );
+
+  const quoteEntries = await Promise.all(
+    uniqueRows.map(async (row) => {
+      try {
+        const [quote, latestPoint] = await Promise.all([
+          getFinnhubQuote(row.symbol),
+          getLatestStockChartPoint({
+            symbol: row.symbol,
+            market: row.market,
+          }).catch(() => null),
+        ]);
+
+        return [
+          row.securityId,
+          {
+            currentPrice: quote.price,
+            changeAmount: quote.changeAmount,
+            changePercent: quote.changePercent,
+            latestVolume: latestPoint?.volume ?? null,
+          },
+        ] as const;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return new Map(
+    quoteEntries.filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+  );
+}
+
 function buildDashboardPositions(
   filteredPositions: Awaited<ReturnType<typeof getPortfolioPositions>>,
   latestPriceBySecurity: Map<string, number>,
+  latestPriceSummaryBySecurity: Map<
+    string,
+    {
+      currentPrice: number;
+      changeAmount: number | null;
+      changePercent: number | null;
+      latestVolume: number | null;
+    }
+  >,
+  livePriceSummaryBySecurity: Map<
+    string,
+    {
+      currentPrice: number;
+      changeAmount: number | null;
+      changePercent: number | null;
+      latestVolume: number | null;
+    }
+  >,
 ): DashboardPositionRow[] {
   return filteredPositions.map((row) => {
     const avgCost = Number(row.avgCostPerShare);
+    const liveSummary = livePriceSummaryBySecurity.get(row.securityId);
+    const snapshotSummary = latestPriceSummaryBySecurity.get(row.securityId);
+
     return {
+      securityId: row.securityId,
       symbol: row.symbol,
       name: row.name,
       market: row.market,
       quantity: Number(row.quantity),
       avgCost,
-      currentPrice: latestPriceBySecurity.get(row.securityId) ?? avgCost,
+      currentPrice:
+        liveSummary?.currentPrice ??
+        snapshotSummary?.currentPrice ??
+        latestPriceBySecurity.get(row.securityId) ??
+        avgCost,
+      changeAmount: liveSummary?.changeAmount ?? snapshotSummary?.changeAmount ?? null,
+      changePercent:
+        liveSummary?.changePercent ?? snapshotSummary?.changePercent ?? null,
+      latestVolume: liveSummary?.latestVolume ?? snapshotSummary?.latestVolume ?? null,
       currency: row.currency,
     };
   });
@@ -401,20 +570,45 @@ function buildDashboardChartTransactions(
 
 function buildDashboardWatchlist(
   watchlistRows: Awaited<ReturnType<typeof getWatchlistItems>>,
-  latestPriceBySecurity: Map<string, number>,
+  latestPriceSummaryBySecurity: Map<
+    string,
+    {
+      currentPrice: number;
+      changeAmount: number | null;
+      changePercent: number | null;
+      latestVolume: number | null;
+    }
+  >,
+  livePriceSummaryBySecurity: Map<
+    string,
+    {
+      currentPrice: number;
+      changeAmount: number | null;
+      changePercent: number | null;
+      latestVolume: number | null;
+    }
+  >,
   heldSecurityIds: Set<string>,
 ): DashboardWatchlistRow[] {
-  return watchlistRows.map((row) => ({
-    id: row.id,
-    symbol: row.symbol,
-    name: row.name,
-    market: row.market,
-    currency: row.currency,
-    currentPrice: latestPriceBySecurity.get(row.securityId) ?? null,
-    note: row.note,
-    createdAt: row.createdAt,
-    isHeld: heldSecurityIds.has(row.securityId),
-  }));
+  return watchlistRows.map((row) => {
+    const liveSummary = livePriceSummaryBySecurity.get(row.securityId);
+    const snapshotSummary = latestPriceSummaryBySecurity.get(row.securityId);
+
+    return {
+      id: row.id,
+      symbol: row.symbol,
+      name: row.name,
+      market: row.market,
+      currency: row.currency,
+      currentPrice: liveSummary?.currentPrice ?? snapshotSummary?.currentPrice ?? null,
+      changeAmount: liveSummary?.changeAmount ?? snapshotSummary?.changeAmount ?? null,
+      changePercent: liveSummary?.changePercent ?? snapshotSummary?.changePercent ?? null,
+      latestVolume: liveSummary?.latestVolume ?? snapshotSummary?.latestVolume ?? null,
+      note: row.note,
+      createdAt: row.createdAt,
+      isHeld: heldSecurityIds.has(row.securityId),
+    };
+  });
 }
 
 function getDashboardWarning(
@@ -463,13 +657,30 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
       ]),
     );
     const latestPriceBySecurity = await getLatestPricesBySecurity(securityIds);
+    const latestPriceSummaryBySecurity =
+      await getLatestPriceSummaryBySecurity(securityIds);
+    const liveTrackedPriceSummaryBySecurity = await getLiveTrackedPriceSummary([
+      ...filteredPositions.map((row) => ({
+        securityId: row.securityId,
+        symbol: row.symbol,
+        market: row.market,
+      })),
+      ...watchlistRows.map((row) => ({
+        securityId: row.securityId,
+        symbol: row.symbol,
+        market: row.market,
+      })),
+    ]);
     const dashboardPositions = buildDashboardPositions(
       filteredPositions,
       latestPriceBySecurity,
+      latestPriceSummaryBySecurity,
+      liveTrackedPriceSummaryBySecurity,
     );
     const dashboardWatchlist = buildDashboardWatchlist(
       watchlistRows,
-      latestPriceBySecurity,
+      latestPriceSummaryBySecurity,
+      liveTrackedPriceSummaryBySecurity,
       new Set(filteredPositions.map((row) => row.securityId)),
     );
     const recentTransactionRows = await getRecentTransactions(portfolio.id);
