@@ -1,6 +1,7 @@
 import type {
   DashboardLayoutState,
   DashboardModuleDefinition,
+  DashboardWorkspacePanel,
 } from "@/features/dashboard/types";
 import {
   MarketIndexesModule,
@@ -136,10 +137,17 @@ const dashboardModuleOrder = {
 } as const;
 
 export function createDefaultDashboardLayout(): DashboardLayoutState {
+  const workspacePanels: DashboardWorkspacePanel[] = dashboardModuleOrder.workspace.map(
+    (moduleId, index) => ({
+      id: `workspace-panel-${index + 1}`,
+      moduleIds: [moduleId],
+    }),
+  );
+
   return {
     summary: [...dashboardModuleOrder.summary],
     summaryHidden: [...dashboardModuleOrder.summaryHidden],
-    workspace: [...dashboardModuleOrder.workspace],
+    workspacePanels,
     workspaceHidden: [...dashboardModuleOrder.workspaceHidden],
     widths: Object.fromEntries(
       Object.values(dashboardModuleRegistry).map((module) => [
@@ -147,6 +155,7 @@ export function createDefaultDashboardLayout(): DashboardLayoutState {
         module.defaultWidthPreset,
       ]),
     ),
+    panelWidths: {},
   };
 }
 
@@ -219,4 +228,43 @@ export function getDashboardModuleWidthPx(
 
   const presetWidth = matched ? getPresetWidthPx(matched.className) : null;
   return presetWidth ?? 360;
+}
+
+export function getDashboardWorkspacePanelWidthPx(
+  panel: DashboardWorkspacePanel,
+  panelWidthValue: string | undefined,
+  moduleWidths: Record<string, string>,
+) {
+  const customWidth = parseCustomWidth(panelWidthValue);
+  if (customWidth !== null) {
+    return customWidth;
+  }
+
+  const moduleWidthsPx = panel.moduleIds.map((moduleId) =>
+    getDashboardModuleWidthPx(moduleId, moduleWidths[moduleId]),
+  );
+
+  if (moduleWidthsPx.length === 0) {
+    return 420;
+  }
+
+  return Math.max(320, ...moduleWidthsPx);
+}
+
+export function getDashboardWorkspacePanelWidthBounds(
+  panel: DashboardWorkspacePanel,
+  moduleWidths: Record<string, string>,
+) {
+  const moduleBounds = panel.moduleIds.map((moduleId) =>
+    getDashboardModuleWidthBounds(moduleId),
+  );
+
+  if (moduleBounds.length === 0) {
+    return { min: 320, max: 1600 };
+  }
+
+  return {
+    min: Math.max(280, Math.min(...moduleBounds.map((bounds) => bounds.min))),
+    max: Math.max(...moduleBounds.map((bounds) => bounds.max)),
+  };
 }

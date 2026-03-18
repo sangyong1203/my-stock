@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import type {
   DashboardArea,
   DashboardLayoutState,
+  DashboardWorkspacePanel,
 } from "@/features/dashboard/types";
 import { createDefaultDashboardLayout } from "@/features/dashboard/registry";
 
@@ -20,10 +21,18 @@ type DashboardLayoutContextValue = {
   layout: DashboardLayoutState;
   moveModule: (
     moduleId: string,
-    nextArea: DashboardArea,
+    nextArea: Exclude<DashboardArea, "workspace">,
     targetModuleId?: string | null,
   ) => void;
+  moveWorkspaceModule: (
+    moduleId: string,
+    targetPanelId: string,
+    targetModuleId?: string | null,
+  ) => boolean;
+  createWorkspacePanel: () => string;
+  removeWorkspacePanel: (panelId: string) => void;
   setModuleWidth: (moduleId: string, widthPresetId: string) => void;
+  setWorkspacePanelWidth: (panelId: string, widthPresetId: string) => void;
   resetLayout: () => void;
 };
 
@@ -36,73 +45,165 @@ type Props = {
   defaultLayout: DashboardLayoutState;
 };
 
+function createPanelId() {
+  return `workspace-panel-${crypto.randomUUID()}`;
+}
+
+function getKnownModuleIds(defaultLayout: DashboardLayoutState) {
+  return new Set([
+    ...defaultLayout.summary,
+    ...defaultLayout.summaryHidden,
+    ...defaultLayout.workspacePanels.flatMap((panel) => panel.moduleIds),
+    ...defaultLayout.workspaceHidden,
+  ]);
+}
+
+function normalizeStringArray(items: unknown, allKnown: Set<string>) {
+  return Array.isArray(items)
+    ? items.filter(
+        (item, index): item is string =>
+          typeof item === "string" && allKnown.has(item) && items.indexOf(item) === index,
+      )
+    : [];
+}
+
+function normalizePanelWidths(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[0] === "string" && typeof entry[1] === "string",
+    ),
+  );
+}
+
+function sanitizeWorkspacePanels(
+  input: unknown,
+  allKnown: Set<string>,
+): DashboardWorkspacePanel[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const usedModuleIds = new Set<string>();
+  const panels: DashboardWorkspacePanel[] = [];
+
+  for (const rawPanel of input) {
+    if (!rawPanel || typeof rawPanel !== "object") {
+      continue;
+    }
+
+    const panelRecord = rawPanel as Partial<DashboardWorkspacePanel>;
+    const panelId =
+      typeof panelRecord.id === "string" && panelRecord.id.trim().length > 0
+        ? panelRecord.id
+        : createPanelId();
+    const moduleIds = Array.isArray(panelRecord.moduleIds)
+      ? panelRecord.moduleIds.filter(
+          (item): item is string =>
+            typeof item === "string" &&
+            allKnown.has(item) &&
+            !usedModuleIds.has(item),
+        )
+      : [];
+
+    if (moduleIds.length === 0) {
+      panels.push({ id: panelId, moduleIds: [] });
+      continue;
+    }
+
+    const limitedModuleIds = moduleIds.slice(0, 3);
+    for (const moduleId of limitedModuleIds) {
+      usedModuleIds.add(moduleId);
+    }
+
+    panels.push({
+      id: panelId,
+      moduleIds: limitedModuleIds,
+    });
+  }
+
+  return panels;
+}
+
 function sanitizeLayout(
   layout: DashboardLayoutState,
   defaultLayout: DashboardLayoutState,
 ) {
-  const allKnown = new Set([
-    ...defaultLayout.summary,
-    ...defaultLayout.summaryHidden,
-    ...defaultLayout.workspace,
-    ...defaultLayout.workspaceHidden,
-  ]);
-
-  const normalizeArea = (items: unknown) =>
-    Array.isArray(items)
-      ? items.filter(
-          (item, index): item is string =>
-            typeof item === "string" && allKnown.has(item) && items.indexOf(item) === index,
-        )
-      : [];
-
-  const summary = normalizeArea(layout.summary);
-  const summaryHidden = normalizeArea(layout.summaryHidden).filter(
+  const allKnown = getKnownModuleIds(defaultLayout);
+  const summary = normalizeStringArray(layout.summary, allKnown);
+  const summaryHidden = normalizeStringArray(layout.summaryHidden, allKnown).filter(
     (item) => !summary.includes(item),
   );
-  const workspace = normalizeArea(layout.workspace).filter(
+  const workspaceHidden = normalizeStringArray(layout.workspaceHidden, allKnown).filter(
     (item) => !summary.includes(item) && !summaryHidden.includes(item),
   );
-  const workspaceHidden = normalizeArea(layout.workspaceHidden).filter(
+  const legacyWorkspace = normalizeStringArray(
+    (layout as DashboardLayoutState & { workspace?: unknown }).workspace,
+    allKnown,
+  ).filter(
     (item) =>
       !summary.includes(item) &&
       !summaryHidden.includes(item) &&
-      !workspace.includes(item),
+      !workspaceHidden.includes(item),
   );
+  const workspacePanels =
+    sanitizeWorkspacePanels(layout.workspacePanels, allKnown).length > 0
+      ? sanitizeWorkspacePanels(layout.workspacePanels, allKnown)
+      : legacyWorkspace.map((moduleId) => ({
+          id: createPanelId(),
+          moduleIds: [moduleId],
+        }));
+
+  const occupied = new Set([
+    ...summary,
+    ...summaryHidden,
+    ...workspaceHidden,
+    ...workspacePanels.flatMap((panel) => panel.moduleIds),
+  ]);
 
   const next: DashboardLayoutState = {
     summary,
     summaryHidden,
-    workspace,
+    workspacePanels,
     workspaceHidden,
     widths:
       layout.widths && typeof layout.widths === "object" ? { ...layout.widths } : {},
+    panelWidths: normalizePanelWidths(layout.panelWidths),
   };
 
   for (const moduleId of allKnown) {
-    if (
-      !next.summary.includes(moduleId) &&
-      !next.summaryHidden.includes(moduleId) &&
-      !next.workspace.includes(moduleId) &&
-      !next.workspaceHidden.includes(moduleId)
-    ) {
-      if (defaultLayout.summary.includes(moduleId)) {
-        next.summaryHidden.push(moduleId);
-      } else {
-        next.workspaceHidden.push(moduleId);
-      }
+    if (occupied.has(moduleId)) {
+      continue;
     }
+
+    if (defaultLayout.summary.includes(moduleId)) {
+      next.summaryHidden.push(moduleId);
+      continue;
+    }
+
+    next.workspaceHidden.push(moduleId);
   }
 
   return next;
 }
 
 function removeModule(layout: DashboardLayoutState, moduleId: string): DashboardLayoutState {
+  const nextPanels = layout.workspacePanels.map((panel) => ({
+    ...panel,
+    moduleIds: panel.moduleIds.filter((item) => item !== moduleId),
+  }));
+
   return {
     summary: layout.summary.filter((item) => item !== moduleId),
     summaryHidden: layout.summaryHidden.filter((item) => item !== moduleId),
-    workspace: layout.workspace.filter((item) => item !== moduleId),
+    workspacePanels: nextPanels,
     workspaceHidden: layout.workspaceHidden.filter((item) => item !== moduleId),
     widths: { ...layout.widths },
+    panelWidths: { ...layout.panelWidths },
   };
 }
 
@@ -210,12 +311,93 @@ export function DashboardLayoutProvider({
           return { ...cleared, [nextArea]: nextList };
         });
       },
+      moveWorkspaceModule(moduleId, targetPanelId, targetModuleId) {
+        let moved = false;
+
+        setLayout((current) => {
+          const cleared = removeModule(current, moduleId);
+          const nextPanels = cleared.workspacePanels.map((panel) => ({ ...panel }));
+          const panelIndex = nextPanels.findIndex((panel) => panel.id === targetPanelId);
+
+          if (panelIndex === -1) {
+            return current;
+          }
+
+          const panel = nextPanels[panelIndex];
+          if (
+            panel.moduleIds.length >= 3 &&
+            !panel.moduleIds.includes(moduleId)
+          ) {
+            return current;
+          }
+
+          const nextModuleIds = [...panel.moduleIds];
+          if (!targetModuleId || !nextModuleIds.includes(targetModuleId)) {
+            nextModuleIds.push(moduleId);
+          } else {
+            const targetIndex = nextModuleIds.indexOf(targetModuleId);
+            nextModuleIds.splice(targetIndex, 0, moduleId);
+          }
+
+          panel.moduleIds = nextModuleIds.slice(0, 3);
+          moved = true;
+
+          return {
+            ...cleared,
+            workspacePanels: nextPanels,
+          };
+        });
+
+        return moved;
+      },
+      createWorkspacePanel() {
+        const panelId = createPanelId();
+
+        setLayout((current) => ({
+          ...current,
+          workspacePanels: [
+            ...current.workspacePanels,
+            {
+              id: panelId,
+              moduleIds: [],
+            },
+          ],
+        }));
+
+        return panelId;
+      },
+      removeWorkspacePanel(panelId) {
+        setLayout((current) => {
+          const nextPanels = current.workspacePanels.filter((panel) => panel.id !== panelId);
+          if (nextPanels.length === current.workspacePanels.length) {
+            return current;
+          }
+
+          const nextPanelWidths = { ...current.panelWidths };
+          delete nextPanelWidths[panelId];
+
+          return {
+            ...current,
+            workspacePanels: nextPanels,
+            panelWidths: nextPanelWidths,
+          };
+        });
+      },
       setModuleWidth(moduleId, widthPresetId) {
         setLayout((current) => ({
           ...current,
           widths: {
             ...current.widths,
             [moduleId]: widthPresetId,
+          },
+        }));
+      },
+      setWorkspacePanelWidth(panelId, widthPresetId) {
+        setLayout((current) => ({
+          ...current,
+          panelWidths: {
+            ...current.panelWidths,
+            [panelId]: widthPresetId,
           },
         }));
       },

@@ -2,7 +2,43 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dashboardPreferences } from "@/db/schema";
 import { createDefaultDashboardLayout } from "@/features/dashboard/registry";
-import type { DashboardLayoutState } from "@/features/dashboard/types";
+import type {
+  DashboardLayoutState,
+  DashboardWorkspacePanel,
+} from "@/features/dashboard/types";
+
+function createPanelId(index: number) {
+  return `workspace-panel-migrated-${index + 1}`;
+}
+
+function normalizeArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeWorkspacePanels(value: unknown): DashboardWorkspacePanel[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((panel, index) => {
+    if (!panel || typeof panel !== "object") {
+      return [];
+    }
+
+    const record = panel as Partial<DashboardWorkspacePanel>;
+    const moduleIds = normalizeArray(record.moduleIds).slice(0, 3);
+
+    return [
+      {
+        id:
+          typeof record.id === "string" && record.id.trim().length > 0
+            ? record.id
+            : createPanelId(index),
+        moduleIds,
+      },
+    ];
+  });
+}
 
 function sanitizeLayout(input: unknown): DashboardLayoutState {
   const fallback = createDefaultDashboardLayout();
@@ -11,10 +47,10 @@ function sanitizeLayout(input: unknown): DashboardLayoutState {
     return fallback;
   }
 
-  const record = input as Partial<DashboardLayoutState>;
-  const normalizeArray = (value: unknown) =>
-    Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-
+  const record = input as Partial<DashboardLayoutState> & {
+    hidden?: unknown;
+    workspace?: unknown;
+  };
   const widths =
     record.widths && typeof record.widths === "object"
       ? Object.fromEntries(
@@ -24,20 +60,34 @@ function sanitizeLayout(input: unknown): DashboardLayoutState {
           ),
         )
       : {};
+  const panelWidths =
+    record.panelWidths && typeof record.panelWidths === "object"
+      ? Object.fromEntries(
+          Object.entries(record.panelWidths).filter(
+            (entry): entry is [string, string] =>
+              typeof entry[0] === "string" && typeof entry[1] === "string",
+          ),
+        )
+      : {};
 
-  const legacyHidden = normalizeArray((record as { hidden?: unknown }).hidden);
+  const legacyHidden = normalizeArray(record.hidden);
   const summary = normalizeArray(record.summary);
   const summaryHidden = normalizeArray(record.summaryHidden);
-  const workspace = normalizeArray(record.workspace).filter(
-    (moduleId) => !summary.includes(moduleId) && !summaryHidden.includes(moduleId),
-  );
   const workspaceHidden = normalizeArray(record.workspaceHidden);
+  const legacyWorkspace = normalizeArray(record.workspace);
+  const workspacePanels =
+    normalizeWorkspacePanels(record.workspacePanels).length > 0
+      ? normalizeWorkspacePanels(record.workspacePanels)
+      : legacyWorkspace.map((moduleId, index) => ({
+          id: createPanelId(index),
+          moduleIds: [moduleId],
+        }));
 
   for (const moduleId of legacyHidden) {
     if (
       summary.includes(moduleId) ||
       summaryHidden.includes(moduleId) ||
-      workspace.includes(moduleId) ||
+      workspacePanels.some((panel) => panel.moduleIds.includes(moduleId)) ||
       workspaceHidden.includes(moduleId)
     ) {
       continue;
@@ -53,9 +103,10 @@ function sanitizeLayout(input: unknown): DashboardLayoutState {
   return {
     summary,
     summaryHidden,
-    workspace,
+    workspacePanels,
     workspaceHidden,
     widths,
+    panelWidths,
   };
 }
 
@@ -83,11 +134,15 @@ export async function getDashboardPreferenceLayout(userId: string | null | undef
     ...layout,
     summary: layout.summary,
     summaryHidden: layout.summaryHidden,
-    workspace: layout.workspace,
+    workspacePanels: layout.workspacePanels,
     workspaceHidden: layout.workspaceHidden,
     widths: {
       ...fallback.widths,
       ...layout.widths,
+    },
+    panelWidths: {
+      ...fallback.panelWidths,
+      ...layout.panelWidths,
     },
   };
 }
@@ -123,11 +178,15 @@ function getDashboardPreferenceLayoutSync(layout: DashboardLayoutState) {
     ...sanitized,
     summary: sanitized.summary,
     summaryHidden: sanitized.summaryHidden,
-    workspace: sanitized.workspace,
+    workspacePanels: sanitized.workspacePanels,
     workspaceHidden: sanitized.workspaceHidden,
     widths: {
       ...fallback.widths,
       ...sanitized.widths,
+    },
+    panelWidths: {
+      ...fallback.panelWidths,
+      ...sanitized.panelWidths,
     },
   };
 }

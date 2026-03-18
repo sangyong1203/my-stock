@@ -29,9 +29,15 @@ export type DashboardArea =
 export type DashboardLayoutState = {
   summary: string[];
   summaryHidden: string[];
-  workspace: string[];
+  workspacePanels: DashboardWorkspacePanel[];
   workspaceHidden: string[];
   widths: Record<string, string>;
+  panelWidths: Record<string, string>;
+};
+
+export type DashboardWorkspacePanel = {
+  id: string;
+  moduleIds: string[];
 };
 
 export type DashboardWidthPreset = {

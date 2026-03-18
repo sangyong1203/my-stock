@@ -5,6 +5,7 @@ import {
   positions,
   priceSnapshots,
   securities,
+  securityNotes,
   transactions,
   watchlistItems,
 } from "@/db/schema";
@@ -29,6 +30,16 @@ export type DashboardPositionRow = {
   changePercent: number | null;
   latestVolume: number | null;
   currency: "KRW" | "USD";
+  notes: DashboardSecurityNoteRow[];
+};
+
+export type DashboardSecurityNoteRow = {
+  id: string;
+  securityId: string;
+  title: string | null;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export type DashboardTransactionRow = {
@@ -110,6 +121,7 @@ const FALLBACK_DATA: DashboardData = {
       changePercent: 1.21,
       latestVolume: 52300000,
       currency: "USD",
+      notes: [],
     },
     {
       securityId: "demo-security-nvda",
@@ -123,6 +135,7 @@ const FALLBACK_DATA: DashboardData = {
       changePercent: -1.14,
       latestVolume: 41200000,
       currency: "USD",
+      notes: [],
     },
     {
       securityId: "demo-security-tsla",
@@ -136,6 +149,7 @@ const FALLBACK_DATA: DashboardData = {
       changePercent: 1.97,
       latestVolume: 67800000,
       currency: "USD",
+      notes: [],
     },
   ],
   recentTransactions: [],
@@ -318,6 +332,43 @@ async function getLatestPriceSummaryBySecurity(securityIds: string[]) {
   );
 }
 
+async function getSecurityNotesBySecurity(
+  portfolioId: string,
+  securityIds: string[],
+) {
+  if (securityIds.length === 0) {
+    return new Map<string, DashboardSecurityNoteRow[]>();
+  }
+
+  const noteRows = await db
+    .select({
+      id: securityNotes.id,
+      securityId: securityNotes.securityId,
+      title: securityNotes.title,
+      body: securityNotes.body,
+      createdAt: securityNotes.createdAt,
+      updatedAt: securityNotes.updatedAt,
+    })
+    .from(securityNotes)
+    .where(eq(securityNotes.portfolioId, portfolioId))
+    .orderBy(desc(securityNotes.createdAt));
+
+  const securityIdSet = new Set(securityIds);
+  const notesBySecurity = new Map<string, DashboardSecurityNoteRow[]>();
+
+  for (const row of noteRows) {
+    if (!securityIdSet.has(row.securityId)) {
+      continue;
+    }
+
+    const list = notesBySecurity.get(row.securityId) ?? [];
+    list.push(row);
+    notesBySecurity.set(row.securityId, list);
+  }
+
+  return notesBySecurity;
+}
+
 const FINNHUB_SUPPORTED_MARKETS = new Set(["NASDAQ", "NYSE", "ETF"]);
 
 async function getLiveTrackedPriceSummary(
@@ -387,6 +438,7 @@ function buildDashboardPositions(
       latestVolume: number | null;
     }
   >,
+  notesBySecurity: Map<string, DashboardSecurityNoteRow[]>,
 ): DashboardPositionRow[] {
   return filteredPositions.map((row) => {
     const avgCost = Number(row.avgCostPerShare);
@@ -410,6 +462,7 @@ function buildDashboardPositions(
         liveSummary?.changePercent ?? snapshotSummary?.changePercent ?? null,
       latestVolume: liveSummary?.latestVolume ?? snapshotSummary?.latestVolume ?? null,
       currency: row.currency,
+      notes: notesBySecurity.get(row.securityId) ?? [],
     };
   });
 }
@@ -659,6 +712,10 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
     const latestPriceBySecurity = await getLatestPricesBySecurity(securityIds);
     const latestPriceSummaryBySecurity =
       await getLatestPriceSummaryBySecurity(securityIds);
+    const notesBySecurity = await getSecurityNotesBySecurity(
+      portfolio.id,
+      filteredPositions.map((row) => row.securityId),
+    );
     const liveTrackedPriceSummaryBySecurity = await getLiveTrackedPriceSummary([
       ...filteredPositions.map((row) => ({
         securityId: row.securityId,
@@ -676,6 +733,7 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
       latestPriceBySecurity,
       latestPriceSummaryBySecurity,
       liveTrackedPriceSummaryBySecurity,
+      notesBySecurity,
     );
     const dashboardWatchlist = buildDashboardWatchlist(
       watchlistRows,
