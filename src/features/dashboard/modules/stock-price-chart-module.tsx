@@ -8,9 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -25,6 +23,7 @@ import type { StockChartData } from "@/features/market-data/server/stock-chart-s
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
 type ChartRange = "6m" | "1y" | "2y" | "5y" | "10y" | "all";
+type ChartInterval = "day" | "week" | "month";
 
 type ChartMarker = {
   id: string;
@@ -37,6 +36,7 @@ type ChartMarker = {
 type IndicatorKey = "rsi" | "macd" | "volume";
 
 const CHART_RANGES: ChartRange[] = ["6m", "1y", "2y", "5y", "10y", "all"];
+const CHART_INTERVALS: ChartInterval[] = ["day", "week", "month"];
 const CHART_RIGHT_GUTTER = 64;
 
 function formatChartValue(value: number) {
@@ -60,14 +60,14 @@ function ChartStat({
   valueClassName?: string;
 }) {
   return (
-    <div className={`module-stock-price-chart-stat min-w-[72px] text-right ${className ?? ""}`}>
+    <div className={`module-stock-price-chart-stat text-right ${className ?? ""}`}>
       <div
         className={`module-stock-price-chart-stat-label text-[10px] uppercase tracking-[0.12em] text-muted-foreground ${labelClassName ?? ""}`}
       >
         {label}
       </div>
       <div
-        className={`module-stock-price-chart-stat-value text-xs font-medium text-foreground ${valueClassName ?? ""}`}
+        className={`module-stock-price-chart-stat-value text-xs font-normal text-muted-foreground ${valueClassName ?? ""}`}
       >
         {formatChartValue(value)}
       </div>
@@ -806,6 +806,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
     [model.dashboard.positions],
   );
   const [selectedRange, setSelectedRange] = useState<ChartRange>("1y");
+  const [selectedInterval, setSelectedInterval] = useState<ChartInterval>("day");
   const [chart, setChart] = useState<StockChartData | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -862,7 +863,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
 
   useEffect(() => {
     setSelectedMarkerId(null);
-  }, [activePosition?.market, activePosition?.symbol, selectedRange]);
+  }, [activePosition?.market, activePosition?.symbol, selectedInterval, selectedRange]);
 
   useEffect(() => {
     if (!activePosition) {
@@ -879,7 +880,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
 
       try {
         const response = await fetch(
-          `/api/market-data/stock-chart?symbol=${encodeURIComponent(activePosition.symbol)}&market=${encodeURIComponent(activePosition.market)}&range=${selectedRange}`,
+          `/api/market-data/stock-chart?symbol=${encodeURIComponent(activePosition.symbol)}&market=${encodeURIComponent(activePosition.market)}&range=${selectedRange}&interval=${selectedInterval}`,
           { cache: "no-store" },
         );
 
@@ -919,7 +920,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
     return () => {
       cancelled = true;
     };
-  }, [activePosition, selectedRange]);
+  }, [activePosition, selectedInterval, selectedRange]);
 
   const positive = (chart?.change ?? 0) >= 0;
   const chartOption = useMemo(() => {
@@ -989,13 +990,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
     <Card className="module-card module-stock-price-chart flex h-full flex-col border-border/70">
       <CardHeader className="module-card-header module-stock-price-chart-header gap-3">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle className="module-stock-price-chart-title">Stock Price Chart</CardTitle>
-            <CardDescription className="module-stock-price-chart-description">
-              Candlestick view with brush selection for the current module symbol.
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={activePosition ? `${activePosition.symbol}:${activePosition.market}` : ""}
               onChange={(event) => {
@@ -1014,6 +1009,24 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="module-stock-price-chart-interval-tabs flex items-center gap-1 rounded-lg border border-border/70 p-1">
+              {CHART_INTERVALS.map((interval) => (
+                <button
+                  key={interval}
+                  type="button"
+                  onClick={() => setSelectedInterval(interval)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition ${
+                    selectedInterval === interval
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {interval}
+                </button>
+              ))}
+            </div>
             <div className="module-stock-price-chart-range-tabs flex items-center gap-1 rounded-lg border border-border/70 p-1">
               {CHART_RANGES.map((range) => (
                 <button
@@ -1035,7 +1048,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 gap-2 border-border/70 bg-background px-3 text-sm"
+                  className="h-[36px] gap-2 border-border/70 bg-background px-3 text-sm"
                 >
                   <SlidersHorizontal className="size-4" />
                   Indicators
@@ -1106,11 +1119,11 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
                 labelClassName="module-stock-price-chart-stat-fifty-two-week-low-label"
                 valueClassName="module-stock-price-chart-stat-fifty-two-week-low-value"
               />
-              <div className="module-stock-price-chart-stat module-stock-price-chart-stat-volume min-w-[72px] text-right">
+              <div className="module-stock-price-chart-stat module-stock-price-chart-stat-volume text-right">
                 <div className="module-stock-price-chart-stat-label module-stock-price-chart-stat-volume-label text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                   Volume
                 </div>
-                <div className="module-stock-price-chart-stat-value module-stock-price-chart-stat-volume-value text-xs font-medium text-foreground">
+                <div className="module-stock-price-chart-stat-value module-stock-price-chart-stat-volume-value text-xs font-normal text-muted-foreground">
                   {formatVolume(latestVolume)}
                 </div>
               </div>
