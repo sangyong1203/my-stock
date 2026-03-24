@@ -10,6 +10,7 @@ import {
   OpenPositionsModule,
   PnlSummaryModule,
   RecentTransactionsModule,
+  StockFilterModule,
   StockPriceChartModule,
   TotalMarketValueModule,
   WatchlistModule,
@@ -83,6 +84,17 @@ export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> 
       { id: "lg", label: "L", className: "w-[860px] min-w-[860px]" },
     ],
   },
+  "stock-filter": {
+    id: "stock-filter",
+    title: "Stock Filter",
+    component: StockFilterModule,
+    defaultWidthPreset: "md",
+    widthPresets: [
+      { id: "sm", label: "S", className: "w-[820px] min-w-[820px]" },
+      { id: "md", label: "M", className: "w-[980px] min-w-[980px]" },
+      { id: "lg", label: "L", className: "w-[1180px] min-w-[1180px]" },
+    ],
+  },
   "next-build-steps": {
     id: "next-build-steps",
     title: "Next Build Steps",
@@ -129,6 +141,7 @@ const dashboardModuleOrder = {
   workspace: [
     "open-positions",
     "stock-price-chart",
+    "stock-filter",
     "news",
     "watchlist",
     "recent-transactions",

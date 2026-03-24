@@ -91,6 +91,19 @@ export type DashboardWatchlistRow = {
   isHeld: boolean;
 };
 
+export type DashboardStockListRow = {
+  symbol: string;
+  name: string;
+  market: string;
+  currency: "KRW" | "USD";
+  currentPrice: number | null;
+  changeAmount: number | null;
+  changePercent: number | null;
+  latestVolume: number | null;
+  watchlistItemId: string | null;
+  isWatchlisted: boolean;
+};
+
 export type DashboardData = {
   source: "database" | "demo";
   warning?: string;
@@ -99,10 +112,26 @@ export type DashboardData = {
   chartTransactions: DashboardChartTransactionRow[];
   marketIndexes: DashboardMarketIndexRow[];
   watchlist: DashboardWatchlistRow[];
+  stockList: DashboardStockListRow[];
   realizedPnl: number;
   realizedReturnRate: number;
   userId: string | null;
 };
+
+const STOCK_FILTER_UNIVERSE = [
+  { symbol: "AAPL", name: "Apple", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "MSFT", name: "Microsoft", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "NVDA", name: "NVIDIA", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "GOOGL", name: "Alphabet", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "AMZN", name: "Amazon", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "META", name: "Meta", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "TSLA", name: "Tesla", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "AMD", name: "AMD", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "NFLX", name: "Netflix", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "PLTR", name: "Palantir", market: "NASDAQ", currency: "USD" as const },
+  { symbol: "JPM", name: "JPMorgan Chase", market: "NYSE", currency: "USD" as const },
+  { symbol: "BRK.B", name: "Berkshire Hathaway B", market: "NYSE", currency: "USD" as const },
+];
 
 const DEMO_USER_ID = "demo-user";
 const FALLBACK_DATA: DashboardData = {
@@ -204,6 +233,56 @@ const FALLBACK_DATA: DashboardData = {
       isHeld: false,
     },
   ],
+  stockList: [
+    {
+      symbol: "AAPL",
+      name: "Apple",
+      market: "NASDAQ",
+      currency: "USD",
+      currentPrice: 201.5,
+      changeAmount: 2.41,
+      changePercent: 1.21,
+      latestVolume: 52300000,
+      watchlistItemId: null,
+      isWatchlisted: false,
+    },
+    {
+      symbol: "MSFT",
+      name: "Microsoft",
+      market: "NASDAQ",
+      currency: "USD",
+      currentPrice: 418.35,
+      changeAmount: 7.56,
+      changePercent: 1.84,
+      latestVolume: 18560000,
+      watchlistItemId: "demo-watch-msft",
+      isWatchlisted: true,
+    },
+    {
+      symbol: "GOOGL",
+      name: "Alphabet",
+      market: "NASDAQ",
+      currency: "USD",
+      currentPrice: 302.06,
+      changeAmount: 4.27,
+      changePercent: 1.43,
+      latestVolume: 12600000,
+      watchlistItemId: null,
+      isWatchlisted: false,
+    },
+    {
+      symbol: "AMZN",
+      name: "Amazon",
+      market: "NASDAQ",
+      currency: "USD",
+      currentPrice: 203.11,
+      changeAmount: -1.47,
+      changePercent: -0.72,
+      latestVolume: 8240000,
+      watchlistItemId: "demo-watch-amzn",
+      isWatchlisted: true,
+    },
+  ],
   realizedPnl: 0,
   realizedReturnRate: 0,
   userId: null,
@@ -221,6 +300,7 @@ function buildMissingPortfolioResponse(
     recentTransactions: [],
     chartTransactions: [],
     watchlist: [],
+    stockList: [],
     userId: effectiveUserId,
     warning: userId
       ? "No portfolio found for this account yet. Add your first transaction."
@@ -664,6 +744,60 @@ function buildDashboardWatchlist(
   });
 }
 
+async function getLiveStockListRows(
+  watchlistRows: Awaited<ReturnType<typeof getWatchlistItems>>,
+): Promise<DashboardStockListRow[]> {
+  const entries = await Promise.all(
+    STOCK_FILTER_UNIVERSE.map(async (item) => {
+      try {
+        const [quote, latestPoint] = await Promise.all([
+          getFinnhubQuote(item.symbol),
+          getLatestStockChartPoint({
+            symbol: item.symbol,
+            market: item.market,
+          }).catch(() => null),
+        ]);
+
+        const watchlistItem = watchlistRows.find(
+          (row) => row.symbol === item.symbol && row.market === item.market,
+        );
+
+        return {
+          symbol: item.symbol,
+          name: item.name,
+          market: item.market,
+          currency: item.currency,
+          currentPrice: quote.price,
+          changeAmount: quote.changeAmount,
+          changePercent: quote.changePercent,
+          latestVolume: latestPoint?.volume ?? null,
+          watchlistItemId: watchlistItem?.id ?? null,
+          isWatchlisted: Boolean(watchlistItem),
+        } satisfies DashboardStockListRow;
+      } catch {
+        const watchlistItem = watchlistRows.find(
+          (row) => row.symbol === item.symbol && row.market === item.market,
+        );
+
+        return {
+          symbol: item.symbol,
+          name: item.name,
+          market: item.market,
+          currency: item.currency,
+          currentPrice: null,
+          changeAmount: null,
+          changePercent: null,
+          latestVolume: null,
+          watchlistItemId: watchlistItem?.id ?? null,
+          isWatchlisted: Boolean(watchlistItem),
+        } satisfies DashboardStockListRow;
+      }
+    }),
+  );
+
+  return entries;
+}
+
 function getDashboardWarning(
   userId: string | null | undefined,
   dashboardPositions: DashboardPositionRow[],
@@ -741,6 +875,7 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
       liveTrackedPriceSummaryBySecurity,
       new Set(filteredPositions.map((row) => row.securityId)),
     );
+    const stockList = await getLiveStockListRows(watchlistRows);
     const recentTransactionRows = await getRecentTransactions(portfolio.id);
     const allTransactionRows = await getAllTransactionsForRealizedPnl(portfolio.id);
     const chartTransactionRows = await getAllTransactionsForChart(portfolio.id);
@@ -759,6 +894,7 @@ export async function getDashboardData(userId?: string | null): Promise<Dashboar
       chartTransactions,
       marketIndexes,
       watchlist: dashboardWatchlist,
+      stockList,
       realizedPnl,
       realizedReturnRate,
       userId: effectiveUserId,

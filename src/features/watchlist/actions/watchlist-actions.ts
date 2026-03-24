@@ -119,3 +119,32 @@ export async function deleteWatchlistItemAction(
     };
   }
 }
+
+export async function toggleWatchlistItemAction(input: {
+  watchlistItemId?: string | null;
+  symbol: string;
+  securityName: string;
+  market: string;
+  currency: string;
+}): Promise<ActionResult> {
+  if (input.watchlistItemId) {
+    return deleteWatchlistItemAction(input.watchlistItemId);
+  }
+
+  const formData = new FormData();
+  formData.set("symbol", input.symbol);
+  formData.set("securityName", input.securityName);
+  formData.set("market", input.market);
+  formData.set("currency", input.currency);
+  formData.set("note", "");
+
+  const result = await createWatchlistItemAction(
+    { success: false, message: "", itemId: undefined },
+    formData,
+  );
+
+  return {
+    success: result.success,
+    message: result.message,
+  };
+}
