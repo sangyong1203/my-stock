@@ -1,4 +1,4 @@
-export type StockChartRange = "1m" | "3m" | "6m" | "1y";
+export type StockChartRange = "6m" | "1y" | "2y" | "5y" | "10y" | "all";
 
 export type StockChartPoint = {
   date: string;
@@ -14,17 +14,25 @@ export type StockChartData = {
   market: string;
   range: StockChartRange;
   points: StockChartPoint[];
+  indicatorPoints: StockChartPoint[];
   latestClose: number;
   change: number;
   changePercent: number;
+  dayHigh: number;
+  dayLow: number;
+  fiftyTwoWeekHigh: number;
+  fiftyTwoWeekLow: number;
 };
 
 const RANGE_DAY_MAP: Record<StockChartRange, number> = {
-  "1m": 30,
-  "3m": 90,
   "6m": 180,
   "1y": 365,
+  "2y": 365 * 2,
+  "5y": 365 * 5,
+  "10y": 365 * 10,
+  all: Number.POSITIVE_INFINITY,
 };
+const INDICATOR_WARMUP_DAYS = 180;
 
 const SUPPORTED_MARKETS = new Set(["NASDAQ", "NYSE", "ETF"]);
 
@@ -121,23 +129,36 @@ export async function getStockChartData(params: {
   }
 
   const days = RANGE_DAY_MAP[range];
-  const selectedPoints = history.slice(-days);
+  const selectedPoints =
+    days === Number.POSITIVE_INFINITY ? history : history.slice(-Math.min(history.length, days));
+  const indicatorPoints =
+    days === Number.POSITIVE_INFINITY
+      ? history
+      : history.slice(-Math.min(history.length, days + INDICATOR_WARMUP_DAYS));
   const latest = selectedPoints.at(-1) ?? history.at(-1);
   const previous = selectedPoints.at(0) ?? history.at(-2);
+  const trailingYearPoints = history.slice(-Math.min(history.length, 365));
 
   if (!latest || !previous || previous.close <= 0) {
     throw new Error(`Unable to calculate chart change for ${symbol}.`);
   }
 
   const change = latest.close - previous.close;
+  const fiftyTwoWeekHigh = Math.max(...trailingYearPoints.map((point) => point.high));
+  const fiftyTwoWeekLow = Math.min(...trailingYearPoints.map((point) => point.low));
 
   return {
     symbol,
     market,
     range,
     points: selectedPoints,
+    indicatorPoints,
     latestClose: latest.close,
     change,
     changePercent: (change / previous.close) * 100,
+    dayHigh: latest.high,
+    dayLow: latest.low,
+    fiftyTwoWeekHigh,
+    fiftyTwoWeekLow,
   };
 }

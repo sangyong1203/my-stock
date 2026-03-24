@@ -1,8 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
-import type { EChartsOption } from "echarts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
+import type { ECharts, EChartsOption } from "echarts";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -10,13 +12,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useDashboardSelection } from "@/features/dashboard/components/dashboard-selection-provider";
 import type { DashboardModuleProps } from "@/features/dashboard/types";
 import type { StockChartData } from "@/features/market-data/server/stock-chart-service";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
-type ChartRange = "1m" | "3m" | "6m" | "1y";
+type ChartRange = "6m" | "1y" | "2y" | "5y" | "10y" | "all";
 
 type ChartMarker = {
   id: string;
@@ -26,13 +34,45 @@ type ChartMarker = {
   tradeDate: string;
 };
 
-const CHART_RANGES: ChartRange[] = ["1m", "3m", "6m", "1y"];
+type IndicatorKey = "rsi" | "macd" | "volume";
+
+const CHART_RANGES: ChartRange[] = ["6m", "1y", "2y", "5y", "10y", "all"];
+const CHART_RIGHT_GUTTER = 64;
 
 function formatChartValue(value: number) {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function ChartStat({
+  label,
+  value,
+  className,
+  labelClassName,
+  valueClassName,
+}: {
+  label: string;
+  value: number;
+  className?: string;
+  labelClassName?: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className={`module-stock-price-chart-stat min-w-[72px] text-right ${className ?? ""}`}>
+      <div
+        className={`module-stock-price-chart-stat-label text-[10px] uppercase tracking-[0.12em] text-muted-foreground ${labelClassName ?? ""}`}
+      >
+        {label}
+      </div>
+      <div
+        className={`module-stock-price-chart-stat-value text-xs font-medium text-foreground ${valueClassName ?? ""}`}
+      >
+        {formatChartValue(value)}
+      </div>
+    </div>
+  );
 }
 
 function formatVolume(value: number) {
@@ -53,6 +93,15 @@ function toTradeDateKey(value: Date) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+function formatShortDate(value: string) {
+  const [, month, day] = value.split("-");
+  if (!month || !day) {
+    return value;
+  }
+
+  return `${month}-${day}`;
+}
+
 function calculateMovingAverage(points: StockChartData["points"], period: number) {
   return points.map((_, index) => {
     if (index < period - 1) {
@@ -68,18 +117,162 @@ function calculateMovingAverage(points: StockChartData["points"], period: number
   });
 }
 
+function calculateRsi(points: StockChartData["points"], period = 14) {
+  const values = Array<number | null>(points.length).fill(null);
+
+  if (points.length <= period) {
+    return values;
+  }
+
+  let gainSum = 0;
+  let lossSum = 0;
+
+  for (let index = 1; index <= period; index += 1) {
+    const delta = points[index].close - points[index - 1].close;
+    if (delta >= 0) {
+      gainSum += delta;
+    } else {
+      lossSum += Math.abs(delta);
+    }
+  }
+
+  let averageGain = gainSum / period;
+  let averageLoss = lossSum / period;
+  values[period] =
+    averageLoss === 0 ? 100 : 100 - 100 / (1 + averageGain / averageLoss);
+
+  for (let index = period + 1; index < points.length; index += 1) {
+    const delta = points[index].close - points[index - 1].close;
+    const gain = delta > 0 ? delta : 0;
+    const loss = delta < 0 ? Math.abs(delta) : 0;
+
+    averageGain = (averageGain * (period - 1) + gain) / period;
+    averageLoss = (averageLoss * (period - 1) + loss) / period;
+
+    values[index] =
+      averageLoss === 0 ? 100 : 100 - 100 / (1 + averageGain / averageLoss);
+  }
+
+  return values.map((value) =>
+    value === null ? null : Number(value.toFixed(2)),
+  );
+}
+
+function calculateEma(values: number[], period: number) {
+  const multiplier = 2 / (period + 1);
+  const ema = Array<number | null>(values.length).fill(null);
+
+  if (values.length < period) {
+    return ema;
+  }
+
+  let seed = 0;
+  for (let index = 0; index < period; index += 1) {
+    seed += values[index];
+  }
+
+  ema[period - 1] = seed / period;
+
+  for (let index = period; index < values.length; index += 1) {
+    const previous = ema[index - 1] ?? values[index - 1];
+    ema[index] = (values[index] - previous) * multiplier + previous;
+  }
+
+  return ema;
+}
+
+function calculateMacd(points: StockChartData["points"]) {
+  const closes = points.map((point) => point.close);
+  const ema12 = calculateEma(closes, 12);
+  const ema26 = calculateEma(closes, 26);
+  const diff = closes.map((_, index) => {
+    const short = ema12[index];
+    const long = ema26[index];
+
+    if (short === null || long === null) {
+      return null;
+    }
+
+    return Number((short - long).toFixed(3));
+  });
+
+  const diffValues = diff.map((value) => value ?? 0);
+  const signalRaw = calculateEma(diffValues, 9);
+  const signal = signalRaw.map((value, index) =>
+    diff[index] === null || value === null ? null : Number(value.toFixed(3)),
+  );
+  const histogram = diff.map((value, index) => {
+    if (value === null || signal[index] === null) {
+      return null;
+    }
+
+    return Number((value - (signal[index] ?? 0)).toFixed(3));
+  });
+
+  return { diff, signal, histogram };
+}
+
+function createPaneLayout(enabledIndicators: IndicatorKey[]) {
+  const supplementalKeys = [
+    ...(enabledIndicators.includes("rsi") ? (["rsi"] as const) : []),
+    ...(enabledIndicators.includes("macd") ? (["macd"] as const) : []),
+    ...(enabledIndicators.includes("volume") ? (["volume"] as const) : []),
+  ];
+
+  if (supplementalKeys.length === 0) {
+    return [{ key: "price" as const, top: "10%", height: "76%" }];
+  }
+
+  if (supplementalKeys.length === 1) {
+    return [
+      { key: "price" as const, top: "8%", height: "56%" },
+      { key: supplementalKeys[0], top: "68%", height: "18%" },
+    ];
+  }
+
+  if (supplementalKeys.length === 2) {
+    return [
+      { key: "price" as const, top: "8%", height: "44%" },
+      { key: supplementalKeys[0], top: "56%", height: "12%" },
+      { key: supplementalKeys[1], top: "72%", height: "14%" },
+    ];
+  }
+
+  return [
+    { key: "price" as const, top: "8%", height: "34%" },
+    { key: "rsi" as const, top: "46%", height: "10%" },
+    { key: "macd" as const, top: "60%", height: "10%" },
+    { key: "volume" as const, top: "74%", height: "12%" },
+  ];
+}
+
 function buildChartOption(
   chart: StockChartData,
   markers: ChartMarker[],
   averageCost: number | null,
+  enabledIndicators: IndicatorKey[],
 ): EChartsOption {
+  const rightGutter = CHART_RIGHT_GUTTER;
   const dates = chart.points.map((point) => point.date);
   const candles = chart.points.map((point) => [point.open, point.close, point.low, point.high]);
-  const ma5 = calculateMovingAverage(chart.points, 5);
-  const ma20 = calculateMovingAverage(chart.points, 20);
-  const ma60 = calculateMovingAverage(chart.points, 60);
-  const ma120 = calculateMovingAverage(chart.points, 120);
+  const indicatorSourcePoints = chart.indicatorPoints.length > 0 ? chart.indicatorPoints : chart.points;
+  const visibleOffset = Math.max(0, indicatorSourcePoints.length - chart.points.length);
+  const ma20 = calculateMovingAverage(indicatorSourcePoints, 20).slice(visibleOffset);
+  const ma60 = calculateMovingAverage(indicatorSourcePoints, 60).slice(visibleOffset);
+  const ma120 = calculateMovingAverage(indicatorSourcePoints, 120).slice(visibleOffset);
+  const rsi = calculateRsi(indicatorSourcePoints).slice(visibleOffset);
+  const macdRaw = calculateMacd(indicatorSourcePoints);
+  const macd = {
+    diff: macdRaw.diff.slice(visibleOffset),
+    signal: macdRaw.signal.slice(visibleOffset),
+    histogram: macdRaw.histogram.slice(visibleOffset),
+  };
   const averageCostSeries = dates.map(() => averageCost);
+  const paneLayout = createPaneLayout(enabledIndicators);
+  const paneIndexByKey = new Map(paneLayout.map((pane, index) => [pane.key, index]));
+  const volumePaneIndex = paneIndexByKey.get("volume");
+  const rsiPaneIndex = paneIndexByKey.get("rsi");
+  const macdPaneIndex = paneIndexByKey.get("macd");
   const buyMarkers = markers
     .filter((marker) => marker.side === "buy")
     .map((marker) => ({
@@ -114,6 +307,106 @@ function buildChartOption(
     };
   });
 
+  const rsiSeries =
+    rsiPaneIndex === undefined
+      ? []
+      : [
+          {
+            name: "RSI14",
+            type: "line" as const,
+            xAxisIndex: rsiPaneIndex,
+            yAxisIndex: rsiPaneIndex,
+            data: rsi,
+            showSymbol: false,
+            smooth: true,
+            lineStyle: {
+              width: 1.4,
+              color: "#22c55e",
+            },
+            itemStyle: {
+              color: "#22c55e",
+            },
+            markLine: {
+              symbol: "none",
+              lineStyle: {
+                color: "rgba(255,255,255,0.18)",
+                type: "dashed" as const,
+              },
+              label: {
+                show: false,
+              },
+              data: [{ yAxis: 70 }, { yAxis: 30 }],
+            },
+            emphasis: {
+              disabled: true,
+            },
+          },
+        ];
+
+  const macdSeries =
+    macdPaneIndex === undefined
+      ? []
+      : [
+          {
+            name: "MACD Hist",
+            type: "bar" as const,
+            xAxisIndex: macdPaneIndex,
+            yAxisIndex: macdPaneIndex,
+            data: macd.histogram.map((value) =>
+              value === null
+                ? null
+                : {
+                    value,
+                    itemStyle: {
+                      color:
+                        value >= 0
+                          ? "rgba(16, 185, 129, 0.55)"
+                          : "rgba(244, 63, 94, 0.55)",
+                    },
+                  },
+            ),
+            barMaxWidth: 8,
+          },
+          {
+            name: "MACD",
+            type: "line" as const,
+            xAxisIndex: macdPaneIndex,
+            yAxisIndex: macdPaneIndex,
+            data: macd.diff,
+            showSymbol: false,
+            smooth: true,
+            lineStyle: {
+              width: 1.3,
+              color: "#f59e0b",
+            },
+            itemStyle: {
+              color: "#f59e0b",
+            },
+            emphasis: {
+              disabled: true,
+            },
+          },
+          {
+            name: "Signal",
+            type: "line" as const,
+            xAxisIndex: macdPaneIndex,
+            yAxisIndex: macdPaneIndex,
+            data: macd.signal,
+            showSymbol: false,
+            smooth: true,
+            lineStyle: {
+              width: 1.3,
+              color: "#38bdf8",
+            },
+            itemStyle: {
+              color: "#38bdf8",
+            },
+            emphasis: {
+              disabled: true,
+            },
+          },
+        ];
+
   return {
     animationDuration: 350,
     animationDurationUpdate: 250,
@@ -128,10 +421,21 @@ function buildChartOption(
         color: "rgba(255,255,255,0.72)",
         fontSize: 11,
       },
-      selectedMode: false,
+      data: [
+        "Avg Cost",
+        "MA20",
+        "MA60",
+        "MA120",
+        ...(enabledIndicators.includes("volume") ? ["Volume"] : []),
+        "Buy",
+        "Sell",
+        ...(enabledIndicators.includes("rsi") ? ["RSI14"] : []),
+        ...(enabledIndicators.includes("macd") ? ["MACD Hist", "MACD", "Signal"] : []),
+      ],
     },
     axisPointer: {
       link: [{ xAxisIndex: "all" }],
+      snap: true,
       label: {
         backgroundColor: "rgba(18, 18, 18, 0.95)",
       },
@@ -150,18 +454,14 @@ function buildChartOption(
       },
       formatter: (params: unknown) => {
         const items = Array.isArray(params) ? params : [params];
-        const candle = items.find(
-          (item) => typeof item === "object" && item && "seriesType" in item && item.seriesType === "candlestick",
+        const axisItem = items.find(
+          (item) => typeof item === "object" && item && "dataIndex" in item,
         ) as
           | {
               axisValueLabel?: string;
-              data?: [number, number, number, number];
               dataIndex?: number;
             }
           | undefined;
-        const volume = items.find(
-          (item) => typeof item === "object" && item && "seriesType" in item && item.seriesType === "bar",
-        ) as { data?: number | { value: number } } | undefined;
         const tradeMarker = items.find(
           (item) => typeof item === "object" && item && "seriesType" in item && item.seriesType === "scatter",
         ) as
@@ -170,27 +470,24 @@ function buildChartOption(
               data?: { quantity?: number; value?: number };
             }
           | undefined;
-        const candleValue = candle?.data ?? [0, 0, 0, 0];
-        const pointIndex = candle?.dataIndex ?? 0;
-        const volumeValue =
-          typeof volume?.data === "number"
-            ? volume.data
-            : typeof volume?.data === "object" && volume?.data
-              ? volume.data.value
-              : 0;
+        const pointIndex = axisItem?.dataIndex ?? 0;
+        const point = chart.points[pointIndex];
+
+        if (!point) {
+          return "";
+        }
 
         return [
-          `<div class="mb-1 text-xs text-zinc-400">${candle?.axisValueLabel ?? ""}</div>`,
-          `<div>Open: <strong>${formatChartValue(candleValue[0])}</strong></div>`,
-          `<div>Close: <strong>${formatChartValue(candleValue[1])}</strong></div>`,
-          `<div>Low: <strong>${formatChartValue(candleValue[2])}</strong></div>`,
-          `<div>High: <strong>${formatChartValue(candleValue[3])}</strong></div>`,
-          `<div>Avg Cost: <strong>${formatChartValue(Number(averageCost ?? candleValue[1]))}</strong></div>`,
-          `<div>MA5: <strong>${formatChartValue(Number(ma5[pointIndex] ?? candleValue[1]))}</strong></div>`,
-          `<div>MA20: <strong>${formatChartValue(Number(ma20[pointIndex] ?? candleValue[1]))}</strong></div>`,
-          `<div>MA60: <strong>${formatChartValue(Number(ma60[pointIndex] ?? candleValue[1]))}</strong></div>`,
-          `<div>MA120: <strong>${formatChartValue(Number(ma120[pointIndex] ?? candleValue[1]))}</strong></div>`,
-          `<div>Volume: <strong>${formatVolume(volumeValue)}</strong></div>`,
+          `<div class="mb-1 text-xs text-zinc-400">${formatShortDate(axisItem?.axisValueLabel ?? point.date)}</div>`,
+          `<div>Open: <strong>${formatChartValue(point.open)}</strong></div>`,
+          `<div>Close: <strong>${formatChartValue(point.close)}</strong></div>`,
+          `<div>Low: <strong>${formatChartValue(point.low)}</strong></div>`,
+          `<div>High: <strong>${formatChartValue(point.high)}</strong></div>`,
+          `<div>Avg Cost: <strong>${formatChartValue(Number(averageCost ?? point.close))}</strong></div>`,
+          `<div>MA20: <strong>${formatChartValue(Number(ma20[pointIndex] ?? point.close))}</strong></div>`,
+          `<div>MA60: <strong>${formatChartValue(Number(ma60[pointIndex] ?? point.close))}</strong></div>`,
+          `<div>MA120: <strong>${formatChartValue(Number(ma120[pointIndex] ?? point.close))}</strong></div>`,
+          `<div>Volume: <strong>${formatVolume(point.volume)}</strong></div>`,
           tradeMarker
             ? `<div>${tradeMarker.seriesName}: <strong>${tradeMarker.data?.quantity ?? 0} @ ${formatChartValue(Number(tradeMarker.data?.value ?? 0))}</strong></div>`
             : "",
@@ -199,7 +496,7 @@ function buildChartOption(
     },
     toolbox: {
       show: true,
-      right: 8,
+      right: rightGutter - 8,
       top: 8,
       itemSize: 14,
       iconStyle: {
@@ -228,41 +525,96 @@ function buildChartOption(
         borderColor: "rgba(59, 130, 246, 0.65)",
       },
     },
-    grid: [
-      { left: 12, right: 12, top: "10%", height: "56%" },
-      { left: 12, right: 12, top: "70%", height: "18%" },
-    ],
-    xAxis: [
-      {
-        type: "category",
-        data: dates,
-        boundaryGap: true,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { show: false },
-        splitLine: { show: false },
-        min: "dataMin",
-        max: "dataMax",
-      },
-      {
-        type: "category",
-        gridIndex: 1,
-        data: dates,
-        boundaryGap: true,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: {
-          color: "rgba(255,255,255,0.42)",
-          fontSize: 10,
-          interval: Math.max(Math.floor(dates.length / 6), 0),
-        },
-        splitLine: { show: false },
-        min: "dataMin",
-        max: "dataMax",
-      },
-    ],
-    yAxis: [
-      {
+    grid: paneLayout.map((pane) => ({
+      left: 12,
+      right: rightGutter,
+      top: pane.top,
+      height: pane.height,
+    })),
+    xAxis: paneLayout.map((pane, index) => ({
+      type: "category",
+      gridIndex: index,
+      data: dates,
+      boundaryGap: true,
+      axisPointer:
+        index === paneLayout.length - 1
+          ? {
+              label: {
+                show: true,
+                formatter: (params: { value?: unknown }) =>
+                  formatShortDate(String(params?.value ?? "")),
+              },
+              lineStyle: {
+                color: "transparent",
+              },
+            }
+          : {
+              label: {
+                show: false,
+              },
+              lineStyle: {
+                color: "transparent",
+              },
+            },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel:
+        index === paneLayout.length - 1
+          ? {
+              show: true,
+              color: "rgba(255,255,255,0.42)",
+              fontSize: 10,
+              interval: (labelIndex: number) =>
+                labelIndex !== 0 &&
+                labelIndex !== dates.length - 1 &&
+                labelIndex % Math.max(Math.floor(dates.length / 6), 1) === 0,
+              formatter: (value: string) => formatShortDate(value),
+              hideOverlap: true,
+            }
+          : { show: false },
+      splitLine: { show: false },
+      min: "dataMin",
+      max: "dataMax",
+    })),
+    yAxis: paneLayout.map((pane, index) => {
+      if (pane.key === "volume") {
+        return {
+          gridIndex: index,
+          position: "right",
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            color: "rgba(255,255,255,0.42)",
+            fontSize: 10,
+            formatter: (value: number) => formatVolume(value),
+          },
+          splitLine: { show: false },
+        };
+      }
+
+      if (pane.key === "rsi") {
+        return {
+          gridIndex: index,
+          min: 0,
+          max: 100,
+          position: "right",
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            color: "rgba(255,255,255,0.42)",
+            fontSize: 10,
+          },
+          splitLine: {
+            lineStyle: {
+              color: "rgba(255,255,255,0.06)",
+              type: "dashed",
+            },
+          },
+        };
+      }
+
+      return {
+        gridIndex: index,
         scale: true,
         position: "right",
         axisLine: { show: false },
@@ -270,7 +622,8 @@ function buildChartOption(
         axisLabel: {
           color: "rgba(255,255,255,0.42)",
           fontSize: 10,
-          formatter: (value: number) => formatChartValue(value),
+          formatter: (value: number) =>
+            pane.key === "price" ? formatChartValue(value) : formatChartValue(value),
         },
         splitLine: {
           lineStyle: {
@@ -278,32 +631,21 @@ function buildChartOption(
             type: "dashed",
           },
         },
-      },
-      {
-        gridIndex: 1,
-        position: "right",
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: {
-          color: "rgba(255,255,255,0.42)",
-          fontSize: 10,
-          formatter: (value: number) => formatVolume(value),
-        },
-        splitLine: { show: false },
-      },
-    ],
+      };
+    }),
     dataZoom: [
       {
         type: "inside",
-        xAxisIndex: [0, 1],
+        xAxisIndex: paneLayout.map((_, index) => index),
         start: Math.max(0, 100 - Math.min(100, (90 / Math.max(chart.points.length, 1)) * 100)),
         end: 100,
       },
       {
         type: "slider",
-        xAxisIndex: [0, 1],
+        xAxisIndex: paneLayout.map((_, index) => index),
         bottom: "2%",
         height: 20,
+        showDetail: false,
         borderColor: "rgba(255,255,255,0.08)",
         fillerColor: "rgba(59, 130, 246, 0.14)",
         backgroundColor: "rgba(255,255,255,0.03)",
@@ -364,24 +706,6 @@ function buildChartOption(
         },
       },
       {
-        name: "MA5",
-        type: "line",
-        data: ma5,
-        showSymbol: false,
-        smooth: true,
-        connectNulls: false,
-        lineStyle: {
-          width: 1.5,
-          color: "#f59e0b",
-        },
-        itemStyle: {
-          color: "#f59e0b",
-        },
-        emphasis: {
-          disabled: true,
-        },
-      },
-      {
         name: "MA20",
         type: "line",
         data: ma20,
@@ -426,23 +750,27 @@ function buildChartOption(
         connectNulls: false,
         lineStyle: {
           width: 1.5,
-          color: "#22d3ee",
+          color: "#f97316",
         },
         itemStyle: {
-          color: "#22d3ee",
+          color: "#f97316",
         },
         emphasis: {
           disabled: true,
         },
       },
-      {
-        name: "Volume",
-        type: "bar",
-        xAxisIndex: 1,
-        yAxisIndex: 1,
-        data: volumes,
-        barMaxWidth: 10,
-      },
+      ...(volumePaneIndex === undefined
+        ? []
+        : [
+            {
+              name: "Volume",
+              type: "bar" as const,
+              xAxisIndex: volumePaneIndex,
+              yAxisIndex: volumePaneIndex,
+              data: volumes,
+              barMaxWidth: 10,
+            },
+          ]),
       {
         name: "Buy",
         type: "scatter",
@@ -459,11 +787,14 @@ function buildChartOption(
         symbolSize: 18,
         z: 6,
       },
+      ...rsiSeries,
+      ...macdSeries,
     ],
   };
 }
 
 export function StockPriceChartModule({ model }: DashboardModuleProps) {
+  const chartRef = useRef<ECharts | null>(null);
   const { selectedSecurity, setSelectedSecurity } = useDashboardSelection();
   const positions = useMemo(
     () =>
@@ -474,12 +805,14 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
       })),
     [model.dashboard.positions],
   );
-  const [selectedRange, setSelectedRange] = useState<ChartRange>("3m");
+  const [selectedRange, setSelectedRange] = useState<ChartRange>("1y");
   const [chart, setChart] = useState<StockChartData | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const [enabledIndicators, setEnabledIndicators] = useState<IndicatorKey[]>(["volume"]);
+  const [sharedPointerX, setSharedPointerX] = useState<number | null>(null);
 
   useEffect(() => {
     if (
@@ -599,8 +932,13 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
       availableDates.has(transaction.tradeDate),
     );
 
-    return buildChartOption(chart, visibleMarkers, activePosition?.avgCost ?? null);
-  }, [activePosition?.avgCost, chart, chartTransactions]);
+    return buildChartOption(
+      chart,
+      visibleMarkers,
+      activePosition?.avgCost ?? null,
+      enabledIndicators,
+    );
+  }, [activePosition?.avgCost, chart, chartTransactions, enabledIndicators]);
   const latestVolume = chart?.points.at(-1)?.volume ?? 0;
   const chartEvents = useMemo(
     () => ({
@@ -611,13 +949,45 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
 
         setSelectedMarkerId(params.data?.id ?? null);
       },
+      updateAxisPointer: (params: {
+        axesInfo?: Array<{ value?: string | number | Date }>;
+        x?: number;
+      }) => {
+        if (typeof params.x === "number" && Number.isFinite(params.x)) {
+          setSharedPointerX(params.x);
+          return;
+        }
+
+        const value = params.axesInfo?.[0]?.value;
+        const instance = chartRef.current;
+
+        if (value === undefined || !instance) {
+          setSharedPointerX(null);
+          return;
+        }
+
+        try {
+          const option = instance.getOption();
+          const xAxisCount = Array.isArray(option.xAxis) ? option.xAxis.length : 1;
+          const pixel = instance.convertToPixel(
+            { xAxisIndex: Math.max(0, xAxisCount - 1) },
+            value,
+          );
+          setSharedPointerX(typeof pixel === "number" ? pixel : null);
+        } catch {
+          setSharedPointerX(null);
+        }
+      },
+      globalout: () => {
+        setSharedPointerX(null);
+      },
     }),
     [],
   );
 
   return (
     <Card className="module-card module-stock-price-chart flex h-full flex-col border-border/70">
-      <CardHeader className="module-card-header module-stock-price-chart-header gap-4">
+      <CardHeader className="module-card-header module-stock-price-chart-header gap-3">
         <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle className="module-stock-price-chart-title">Stock Price Chart</CardTitle>
@@ -656,16 +1026,49 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {range.toUpperCase()}
+                  {range === "all" ? "All" : range.toUpperCase()}
                 </button>
               ))}
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 gap-2 border-border/70 bg-background px-3 text-sm"
+                >
+                  <SlidersHorizontal className="size-4" />
+                  Indicators
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {(["rsi", "macd", "volume"] as IndicatorKey[]).map((indicator) => (
+                  <DropdownMenuCheckboxItem
+                    key={indicator}
+                    checked={enabledIndicators.includes(indicator)}
+                    onCheckedChange={(checked) =>
+                      setEnabledIndicators((current) =>
+                        checked
+                          ? [...current.filter((value) => value !== indicator), indicator]
+                          : current.filter((value) => value !== indicator),
+                      )
+                    }
+                  >
+                    {indicator === "rsi"
+                      ? "RSI"
+                      : indicator === "macd"
+                        ? "MACD"
+                        : "Volume"}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         {chart ? (
-          <div className="module-stock-price-chart-metrics flex flex-wrap items-baseline justify-between gap-3">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <div className="text-3xl font-semibold tracking-tight">
+          <div className="module-stock-price-chart-metrics flex flex-wrap items-end justify-between gap-4">
+            <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+              <div className="text-3xl font-semibold tracking-tight text-foreground">
                 {formatChartValue(chart.latestClose)}
               </div>
               <div className={positive ? "text-emerald-500" : "text-rose-500"}>
@@ -674,13 +1077,48 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
                 {Math.abs(chart.changePercent).toFixed(2)}%)
               </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              Latest volume {formatVolume(latestVolume)}
+            <div className="module-stock-price-chart-stats flex flex-wrap items-start justify-end gap-x-3 gap-y-2">
+              <ChartStat
+                label="1D High"
+                value={chart.dayHigh}
+                className="module-stock-price-chart-stat-day-high"
+                labelClassName="module-stock-price-chart-stat-day-high-label"
+                valueClassName="module-stock-price-chart-stat-day-high-value"
+              />
+              <ChartStat
+                label="1D Low"
+                value={chart.dayLow}
+                className="module-stock-price-chart-stat-day-low"
+                labelClassName="module-stock-price-chart-stat-day-low-label"
+                valueClassName="module-stock-price-chart-stat-day-low-value"
+              />
+              <ChartStat
+                label="52W High"
+                value={chart.fiftyTwoWeekHigh}
+                className="module-stock-price-chart-stat-fifty-two-week-high"
+                labelClassName="module-stock-price-chart-stat-fifty-two-week-high-label"
+                valueClassName="module-stock-price-chart-stat-fifty-two-week-high-value"
+              />
+              <ChartStat
+                label="52W Low"
+                value={chart.fiftyTwoWeekLow}
+                className="module-stock-price-chart-stat-fifty-two-week-low"
+                labelClassName="module-stock-price-chart-stat-fifty-two-week-low-label"
+                valueClassName="module-stock-price-chart-stat-fifty-two-week-low-value"
+              />
+              <div className="module-stock-price-chart-stat module-stock-price-chart-stat-volume min-w-[72px] text-right">
+                <div className="module-stock-price-chart-stat-label module-stock-price-chart-stat-volume-label text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Volume
+                </div>
+                <div className="module-stock-price-chart-stat-value module-stock-price-chart-stat-volume-value text-xs font-medium text-foreground">
+                  {formatVolume(latestVolume)}
+                </div>
+              </div>
             </div>
           </div>
         ) : null}
       </CardHeader>
-      <CardContent className="module-stock-price-chart-content flex min-h-0 flex-1 flex-col">
+      <CardContent className="module-stock-price-chart-content flex min-h-0 flex-1 flex-col pt-2">
         {positions.length === 0 ? (
           <div className="rounded-xl border border-border/70 p-6 text-sm text-muted-foreground">
             No positions available for charting yet.
@@ -697,10 +1135,19 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
           <div className="module-stock-price-chart-surface relative flex min-h-0 flex-1 flex-col rounded-2xl border border-border/70 bg-muted/20 p-4">
             <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
               <span>{activePosition ? `${activePosition.symbol} · ${activePosition.market}` : ""}</span>
-              <span>{chart.points.at(-1)?.date ?? ""}</span>
+              <span>{chart.points.at(-1)?.date ? formatShortDate(chart.points.at(-1)?.date ?? "") : ""}</span>
             </div>
-            <div className="min-h-[280px] flex-1">
+            <div className="relative min-h-[280px] flex-1">
+              {sharedPointerX !== null ? (
+                <div
+                  className="pointer-events-none absolute inset-y-0 z-10 border-l border-dashed border-white/40"
+                  style={{ left: sharedPointerX, transform: "translateX(-0.5px)" }}
+                />
+              ) : null}
               <ReactECharts
+                onChartReady={(instance) => {
+                  chartRef.current = instance;
+                }}
                 option={chartOption}
                 notMerge={false}
                 replaceMerge={["series"]}

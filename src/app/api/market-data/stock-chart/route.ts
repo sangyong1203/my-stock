@@ -4,13 +4,13 @@ import {
   type StockChartRange,
 } from "@/features/market-data/server/stock-chart-service";
 
-const VALID_RANGES = new Set<StockChartRange>(["1m", "3m", "6m", "1y"]);
+const VALID_RANGES = new Set<StockChartRange>(["6m", "1y", "2y", "5y", "10y", "all"]);
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const symbol = url.searchParams.get("symbol")?.trim() ?? "";
   const market = url.searchParams.get("market")?.trim() ?? "";
-  const range = (url.searchParams.get("range")?.trim() ?? "3m") as StockChartRange;
+  const range = (url.searchParams.get("range")?.trim() ?? "1y") as StockChartRange;
 
   if (!symbol || !market) {
     return NextResponse.json(
