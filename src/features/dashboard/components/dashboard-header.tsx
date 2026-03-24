@@ -49,7 +49,7 @@ export function DashboardHeader({ model }: Props) {
   const { dashboard, displayName, isAuthenticated } = model;
   const { layout } = useDashboardLayout();
   const { generalItems } = useDashboardNews();
-  const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const modeLabel =
     dashboard.source === "database" ? "Portfolio Mode" : "Demo Mode";
   const modeDescription =
@@ -106,11 +106,28 @@ export function DashboardHeader({ model }: Props) {
         <div className="dashboard-header-background absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.15),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(34,197,94,0.25),transparent_35%),radial-gradient(circle_at_80%_80%,rgba(59,130,246,0.2),transparent_40%)]" />
         <div className="dashboard-header-content relative flex flex-col gap-3">
           <div className="dashboard-header-top flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
-            <div className="dashboard-header-copy min-w-0 flex-1 space-y-3">
-              <div className="dashboard-header-title-group flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                  Investment Dashboard
-                </h1>
+            <div className="dashboard-header-copy min-w-0 flex-1">
+              <div className="dashboard-header-title-group flex min-w-0 items-center gap-3">
+                <div className="dashboard-portfolio-news-line min-w-0 flex-1 overflow-hidden rounded-sm bg-black/20 px-0">
+                  {tickerText ? (
+                    <div className="dashboard-portfolio-news-marquee py-1 text-sm text-zinc-200">
+                      <div className="dashboard-portfolio-news-marquee-track">
+                        {tickerItems.map((item, index) => (
+                          <span key={`news-primary-${index}`}>{item}</span>
+                        ))}
+                        {tickerItems.map((item, index) => (
+                          <span key={`news-secondary-${index}`} aria-hidden>
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex h-8 items-center text-xs text-zinc-400">
+                      No general news today.
+                    </div>
+                  )}
+                </div>
                 {dashboard.warning ? (
                   <TooltipProvider>
                     <Tooltip>
@@ -175,26 +192,6 @@ export function DashboardHeader({ model }: Props) {
                   isAuthenticated={isAuthenticated}
                   displayName={displayName}
                 />
-              </div>
-            )}
-          </div>
-          <div className="dashboard-portfolio-news-line h-8 overflow-hidden rounded-sm bg-black/20 px-0">
-            {tickerText ? (
-              <div className="dashboard-portfolio-news-marquee py-1 text-sm text-zinc-200">
-                <div className="dashboard-portfolio-news-marquee-track">
-                  {tickerItems.map((item, index) => (
-                    <span key={`news-primary-${index}`}>{item}</span>
-                  ))}
-                  {tickerItems.map((item, index) => (
-                    <span key={`news-secondary-${index}`} aria-hidden>
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-full items-center text-xs text-zinc-400">
-                No general news today.
               </div>
             )}
           </div>

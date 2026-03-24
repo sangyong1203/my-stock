@@ -76,6 +76,7 @@ export const dashboardModuleRegistry: Record<string, DashboardModuleDefinition> 
     title: "Stock Price Chart",
     component: StockPriceChartModule,
     defaultWidthPreset: "md",
+    resizeMinWidthPx: 800,
     widthPresets: [
       { id: "sm", label: "S", className: "w-[520px] min-w-[520px]" },
       { id: "md", label: "M", className: "w-[680px] min-w-[680px]" },
@@ -200,8 +201,8 @@ export function getDashboardModuleWidthBounds(moduleId: string) {
   const maxPreset = Math.max(...presetWidths);
 
   return {
-    min: Math.max(220, minPreset - 120),
-    max: maxPreset + 420,
+    min: moduleDefinition.resizeMinWidthPx ?? Math.max(220, minPreset - 120),
+    max: moduleDefinition.resizeMaxWidthPx ?? maxPreset + 420,
   };
 }
 
@@ -235,9 +236,10 @@ export function getDashboardWorkspacePanelWidthPx(
   panelWidthValue: string | undefined,
   moduleWidths: Record<string, string>,
 ) {
+  const bounds = getDashboardWorkspacePanelWidthBounds(panel, moduleWidths);
   const customWidth = parseCustomWidth(panelWidthValue);
   if (customWidth !== null) {
-    return customWidth;
+    return Math.max(bounds.min, Math.min(bounds.max, customWidth));
   }
 
   const moduleWidthsPx = panel.moduleIds.map((moduleId) =>
@@ -245,10 +247,10 @@ export function getDashboardWorkspacePanelWidthPx(
   );
 
   if (moduleWidthsPx.length === 0) {
-    return 420;
+    return Math.max(bounds.min, Math.min(bounds.max, 420));
   }
 
-  return Math.max(320, ...moduleWidthsPx);
+  return Math.max(bounds.min, ...moduleWidthsPx);
 }
 
 export function getDashboardWorkspacePanelWidthBounds(
@@ -264,7 +266,7 @@ export function getDashboardWorkspacePanelWidthBounds(
   }
 
   return {
-    min: Math.max(280, Math.min(...moduleBounds.map((bounds) => bounds.min))),
+    min: Math.max(280, Math.max(...moduleBounds.map((bounds) => bounds.min))),
     max: Math.max(...moduleBounds.map((bounds) => bounds.max)),
   };
 }

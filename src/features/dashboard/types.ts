@@ -52,5 +52,7 @@ export type DashboardModuleDefinition = {
   component: (props: DashboardModuleProps) => React.JSX.Element;
   defaultWidthPreset: string;
   widthPresets: DashboardWidthPreset[];
+  resizeMinWidthPx?: number;
+  resizeMaxWidthPx?: number;
 };
 

@@ -987,7 +987,7 @@ export function StockPriceChartModule({ model }: DashboardModuleProps) {
   );
 
   return (
-    <Card className="module-card module-stock-price-chart flex h-full flex-col border-border/70">
+    <Card className="module-card module-stock-price-chart flex h-full min-w-[500px] flex-col border-border/70">
       <CardHeader className="module-card-header module-stock-price-chart-header gap-3">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
